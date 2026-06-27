@@ -1,0 +1,16 @@
+# CPU-only override — disable NVIDIA GPU passthrough for hermes-webui.
+#
+# Use on hosts without an NVIDIA driver / NVIDIA Container Toolkit, or when
+# you want local Hugging Face embedding/reranker/ASR to run on CPU only:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d --build
+#   docker compose -f docker-compose.single.yml -f docker-compose.cpu.yml up -d --build
+#
+# CI smoke tests use this file so runners without GPUs still start cleanly.
+
+services:
+  hermes-webui:
+    gpus: []
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=
+      - NVIDIA_DRIVER_CAPABILITIES=

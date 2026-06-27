@@ -1,0 +1,40 @@
+# Hermes WebUI — single-container Docker Compose (agent in-process)
+#
+# Use when you do NOT want a separate hermes-agent gateway container.
+#
+#   docker compose -f docker-compose.single.yml up -d --build
+#
+# GPU: same defaults as docker-compose.yml (see header there). CPU-only override:
+#   docker compose -f docker-compose.single.yml -f docker-compose.cpu.yml up -d --build
+
+services:
+  hermes-webui:
+    build: .
+    gpus: all
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${HERMES_WEBUI_PORT:-8787}:${HERMES_WEBUI_PORT:-8787}"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ${HERMES_HOME:-./hermes}:/home/hermeswebui/.hermes
+      - ${HERMES_WORKSPACE:-./workspace}:/home/hermeswebui/.hermes/workspace
+      - ${HERMES_MODELS_DIR:-./models}:/models
+    environment:
+      - HERMES_HOME=/home/hermeswebui/.hermes
+      - WANTED_UID=${UID:-1000}
+      - WANTED_GID=${GID:-1000}
+      - HERMES_WEBUI_HOST=${HERMES_WEBUI_HOST:-0.0.0.0}
+      - HERMES_WEBUI_PORT=${HERMES_WEBUI_PORT:-8787}
+      - HERMES_WEBUI_STATE_DIR=${HERMES_WEBUI_STATE_DIR:-./webui}
+      - HERMES_WEBUI_DEFAULT_WORKSPACE=${HERMES_WEBUI_DEFAULT_WORKSPACE:-./workspace}
+      - HERMES_WEBUI_PROFILE_WORKSPACE=${HERMES_WEBUI_PROFILE_WORKSPACE:-${HERMES_WEBUI_DEFAULT_WORKSPACE:-./workspace}}
+      - HERMES_WEBUI_WORKSPACE_NAME=${HERMES_WEBUI_WORKSPACE_NAME:-Home}
+      - HF_MODELS_DIR=${HF_MODELS_DIR:-/models}
+      - HF_HOME=/models
+      - HUGGINGFACE_HUB_CACHE=/models/hub
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    restart: unless-stopped

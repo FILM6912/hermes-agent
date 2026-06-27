@@ -1,0 +1,52 @@
+# Git and VCS
+.git
+.gitignore
+
+# Python cache
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv/
+
+# Secrets and local env (keep example templates for reference only if needed)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
+# Tests — not shipped in the production image
+tests/
+e2e/
+
+# Runtime bind mounts — change constantly; never bake into the image
+hermes/
+workspace/
+models/
+webui/
+
+# Frontend build artifacts — source is still needed for the frontend-build stage
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+static/dist/
+static/dist-v2/
+static-legacy/
+
+# Dev tooling and local artifacts
+.playwright-mcp/
+archive/
+.local-review/
+graphify-out/
+.cursor/
+.claude/
+*.swp
+*.bak
+screenshot-*.png
+full-UI.png
+.DS_Store
+Thumbs.db
+
+# Generated at image build time
+app/domain/_version.py

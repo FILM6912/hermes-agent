@@ -1,0 +1,7 @@
+{
+  "name": "MiniMax Clone",
+  "description": "A dark-themed AI Agent IDE interface clone featuring a 3-column layout with sidebar, chat with rich thinking process visualization, and a live preview window.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

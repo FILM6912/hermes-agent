@@ -1,0 +1,18 @@
+# DEPRECATED — GPU passthrough is enabled by default in docker-compose.yml,
+# docker-compose.single.yml, docker-compose.two-container.yml, and
+# docker-compose.three-container.yml (hermes-webui: gpus: all).
+#
+# This file is kept for backward compatibility with scripts that still pass
+#   -f docker-compose.gpu.yml
+# It is a no-op merge; you can remove it from your command line.
+#
+# Requires on the host: NVIDIA driver + NVIDIA Container Toolkit
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#
+# Verify inside the container:
+#   docker exec hermes-webui /app/venv/bin/python -c "import torch; print(torch.cuda.is_available())"
+#
+# CPU-only hosts: use docker-compose.cpu.yml instead of this file.
+
+services:
+  hermes-webui: {}

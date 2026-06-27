@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent AI Interface</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&family=Noto+Serif:wght@400;500;600;700&family=Noto+Serif+Thai:wght@400;500;600;700&family=Noto+Sans+Mono:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&family=Kanit:wght@400;500;600;700&family=Prompt:wght@400;500;600;700&family=Mitr:wght@400;500;600&family=Chakra+Petch:wght@400;500;600;700&family=Bai+Jamjuree:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Prevent FOUC (Flash of Unstyled Content) for dark mode -->
+    <script>
+      (function () {
+        try {
+          const theme = localStorage.getItem("theme");
+          const systemPrefersDark = window.matchMedia(
+            "(prefers-color-scheme: dark)",
+          ).matches;
+
+          if (
+            theme === "dark" ||
+            (theme === "system" && systemPrefersDark) ||
+            (!theme && systemPrefersDark)
+          ) {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        } catch (e) {
+          console.error("Failed to set initial theme:", e);
+        }
+      })();
+    </script>
+    <style>
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Runtime tokens substituted by FastAPI when serving static/dist (see static/index.html) -->
+    <script>
+      window.__HERMES_CONFIG__ = {
+        maxUploadBytes: __MAX_UPLOAD_BYTES__,
+        csrfToken: __CSRF_TOKEN_JSON__,
+      };
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

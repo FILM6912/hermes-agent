@@ -1,0 +1,107 @@
+# Hermes WebUI + Hermes Agent — two-container Docker Compose (local bind mounts)
+#
+# QUICK START:
+#   1. Copy .env.docker.example to .env and edit values
+#   2. mkdir -p hermes workspace hermes/agents-skills   # or copy ~/.hermes → ./hermes
+#   3. docker compose up -d --build
+#   4. Open http://localhost:8787  (gateway API: http://localhost:8642)
+#
+# Networking: both services use the host network namespace (Linux) so containers
+# can reach host-only endpoints (e.g. LiteLLM at 192.168.99.1:4000) and talk to
+# each other via 127.0.0.1. Port mappings below are documentation only — with
+# host networking the processes bind directly on the host.
+#
+# GPU (local Hugging Face embedding / reranker / ASR):
+#   hermes-webui requests all GPUs by default (requires NVIDIA driver +
+#   NVIDIA Container Toolkit on the host). Hosts without NVIDIA may log a
+#   warning at `up` time; embedding still falls back to CPU when CUDA is
+#   unavailable inside the container. To disable GPU passthrough explicitly:
+#     docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d --build
+#
+# Hermes state (config, sessions, skills, profiles) is stored in ./hermes on the host.
+# Workspace files are in ./workspace (mounted to the default profile workspace).
+#
+# Single-container (agent in-process, no gateway container):
+#   use docker-compose.single.yml or restore the previous one-service layout.
+#
+# For prebuilt WebUI image + named volumes instead of ./hermes bind mount:
+#   see docker-compose.two-container.yml
+
+services:
+  hermes-agent:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-agent
+    network_mode: host
+    entrypoint: ["/bin/bash", "/opt/hermes-webui-patch/agent-entrypoint.sh"]
+    command: ["gateway", "run"]
+    volumes:
+      - ${HERMES_HOME:-./hermes}:/home/hermes/.hermes
+      # npx skills CLI installs to ~/.agents/skills; bind-mount persists across restarts
+      - ${HERMES_HOME:-./hermes}/agents-skills:/home/hermes/.agents/skills
+      - hermes-agent-src:/opt/hermes
+      - ./scripts/patch_agent_skill_view_frontmatter.py:/opt/hermes-webui-patch/patch_agent_skill_view_frontmatter.py:ro
+      - ./docker/agent-entrypoint.sh:/opt/hermes-webui-patch/agent-entrypoint.sh:ro
+    environment:
+      - HERMES_HOME=/home/hermes/.hermes
+      - HERMES_UID=${UID:-1000}
+      - HERMES_GID=${GID:-1000}
+    restart: unless-stopped
+
+  hermes-webui:
+    build:
+      context: .
+      args:
+        HERMES_AGENT_IMAGE: nousresearch/hermes-agent:latest
+    container_name: hermes-webui
+    network_mode: host
+    gpus: all
+    depends_on:
+      - hermes-agent
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ${HERMES_HOME:-./hermes}:/home/hermeswebui/.hermes
+      - hermes-agent-src:/home/hermeswebui/.hermes/hermes-agent:ro
+      - ${HERMES_WORKSPACE:-./workspace}:/home/hermeswebui/.hermes/workspace
+      - ${HERMES_HOME:-./hermes}/agents-skills:/home/hermeswebui/.agents/skills
+      - ${HERMES_MODELS_DIR:-./models}:/models
+    environment:
+      # In-container Hermes home (bind mount target). Do not pass host ./hermes from .env —
+      # relative HERMES_HOME breaks docker_init path resolution (./hermes/hermes/webui).
+      - HERMES_HOME=/home/hermeswebui/.hermes
+      - WANTED_UID=${UID:-1000}
+      - WANTED_GID=${GID:-1000}
+      - HERMES_WEBUI_HOST=${HERMES_WEBUI_HOST:-0.0.0.0}
+      - HERMES_WEBUI_PORT=${HERMES_WEBUI_PORT:-8787}
+      - HERMES_WEBUI_STATE_DIR=${HERMES_WEBUI_STATE_DIR:-./webui}
+      - HERMES_WEBUI_DEFAULT_WORKSPACE=${HERMES_WEBUI_DEFAULT_WORKSPACE:-./workspace}
+      - HERMES_WEBUI_PROFILE_WORKSPACE=${HERMES_WEBUI_PROFILE_WORKSPACE:-${HERMES_WEBUI_DEFAULT_WORKSPACE:-./workspace}}
+      - HERMES_WEBUI_WORKSPACE_NAME=${HERMES_WEBUI_WORKSPACE_NAME:-Home}
+      - HF_MODELS_DIR=${HF_MODELS_DIR:-/models}
+      # Persist HuggingFace hub downloads on the host ./models bind mount
+      - HF_HOME=/models
+      - HUGGINGFACE_HUB_CACHE=/models/hub
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Gateway health checks (host network — not hermes-agent DNS name).
+      - GATEWAY_HEALTH_URL=http://127.0.0.1:${HERMES_GATEWAY_PORT:-8642}
+      - HERMES_GATEWAY_HEALTH_URL=http://127.0.0.1:${HERMES_GATEWAY_PORT:-8642}
+      # Bedrock auth discovery must not block /api/models on EC2 IMDS (169.254.169.254).
+      - AWS_EC2_METADATA_DISABLED=true
+      # Model catalog cache: memory TTL + disk snapshot (invalidated on config/auth mtime).
+      - HERMES_WEBUI_MODELS_CACHE_TTL=60
+      # Session cookie Secure flag: unset = auto (X-Forwarded-Proto). Use 1 only behind HTTPS proxy; 0 for plain http://host:8787.
+      # - HERMES_WEBUI_SECURE=1
+      # Optional: set a password for remote access
+      # - HERMES_WEBUI_PASSWORD=your-secret-password
+      #
+      # Bind-mount permission handling (fixes #1389, #1399):
+      #   Set HERMES_SKIP_CHMOD=1 to bypass the credential-permission fixer, OR
+      #   HERMES_HOME_MODE=0640 to allow group bits on credential files.
+      # - HERMES_SKIP_CHMOD=1
+      # - HERMES_HOME_MODE=0640
+    restart: unless-stopped
+
+volumes:
+  hermes-agent-src:

@@ -1,0 +1,93 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Backup and temporary files
+*.bak
+*.swp
+*.swo
+
+# Archive directory (pre-git backups, kept on disk but not tracked)
+archive/
+
+# Local environment and secrets (but keep the example templates)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+.claude/
+CLAUDE.md
+AGENTS.local.md
+.cursorrules
+.windsurfrules
+.aider*
+copilot-instructions.md
+
+# Generated screenshots and transient artifacts
+screenshot-*.png
+full-UI.png
+
+# Version file written by Docker/CI build — generated, never committed
+app/domain/_version.py
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local reference clones/artifacts — never committed by default.
+# Markdown docs at docs/*.md are intentionally trackable for contributor docs.
+docs/*
+!docs/*.md
+!docs/ui-ux/
+!docs/ui-ux/**
+!docs/rfcs/
+!docs/rfcs/**
+
+# Local-only AI assistant context — never committed even under docs/.
+docs/AGENTS.md
+docs/CLAUDE.md
+docs/.cursorrules
+docs/.windsurfrules
+
+# Local-only PR review harness: rendering drivers, sample bank, fixtures.
+# Used by Claude during deep reviews; never shared in the repo.
+.local-review/
+graphify-out/
+.graphify_cached.json
+.graphify_uncached.txt
+
+# Docker bind mounts (local state — secrets, sessions, skills, workspace files)
+hermes/*
+!hermes/.gitkeep
+!hermes/README.md
+workspace/*
+!workspace/.gitkeep
+!workspace/README.md
+
+# Repo-root WebUI logs from local/bootstrap launches (not in-container ./webui under hermes/)
+webui/
+
+# Cursor Playwright MCP snapshots and console captures
+.playwright-mcp/
+
+.venv/
+
+# Frontend (Agent-UI clone → frontend/)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-electron/
+static/dist/
+static/dist-v2/
+
+# Playwright e2e
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.cache/
+
+# Local Hugging Face model snapshots (mounted via ./models)
+models/*
+!models/.gitkeep

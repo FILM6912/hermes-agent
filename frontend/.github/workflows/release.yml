@@ -1,0 +1,95 @@
+﻿name: Auto Version
+
+on:
+  push:
+    branches:
+      - main
+    tags-ignore:
+      - '*'   # ไม่ trigger workflow จาก tag push
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout repo พร้อม fetch all history และ tags
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          tags: true
+
+      # 2️⃣ Get latest tag
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          git fetch --tags
+          TAG=$(git tag --list 'v*' | sort -V | tail -n1)
+          if [ -z "$TAG" ]; then
+            TAG="v0.0.0"
+          fi
+          echo "Latest tag: $TAG"
+          echo "latest_tag=$TAG" >> $GITHUB_OUTPUT
+
+      # 3️⃣ Bump patch version โดยตรวจสอบไม่ชน tag เดิม
+      - name: Bump version
+        id: bump
+        run: |
+          TAG=${{ steps.get_tag.outputs.latest_tag }}
+          VERSION_NO_V=${TAG#v}
+
+          if [ -z "$VERSION_NO_V" ]; then
+            MAJOR=0
+            MINOR=0
+            PATCH=0
+          else
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION_NO_V"
+          fi
+
+          while git ls-remote --tags origin | grep -q "refs/tags/v$MAJOR.$MINOR.$PATCH"; do
+            PATCH=$((PATCH + 1))
+          done
+
+          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          echo "New tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+      # 4️⃣ Get commits since last tag (ไม่เอา Merge pull request)
+      - name: Get commits since last tag
+        id: commits
+        run: |
+          LAST_TAG=${{ steps.get_tag.outputs.latest_tag }}
+          echo "Checking commits since $LAST_TAG"
+          if [ "$LAST_TAG" = "v0.0.0" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" | grep -v '^-\ Merge pull request')
+          else
+            COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"- %s (%h)" | grep -v '^-\ Merge pull request')
+          fi
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # 5️⃣ Create and push tag
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} ${{ steps.bump.outputs.new_tag }}
+
+      # 6️⃣ Create GitHub Release พร้อม commit log
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          release_name: Release ${{ steps.bump.outputs.new_tag }}
+          body: |
+            ## 📝 Changes
+            ${{ steps.commits.outputs.commits }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
