@@ -26,6 +26,6 @@ npm run dev
 "@
 
 # Backend — foreground (this window)
-Write-Host "[backend]  python bootstrap.py  -> http://127.0.0.1:$Port" -ForegroundColor Green
+Write-Host "[backend]  python bootstrap.py $Port -> http://127.0.0.1:$Port" -ForegroundColor Green
 Write-Host "`nPress Ctrl+C to stop backend.`n" -ForegroundColor DarkGray
-python bootstrap.py
+python bootstrap.py $Port
