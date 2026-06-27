@@ -19,24 +19,30 @@ export function pickFirstUsableSessionId(sessions: HermesSessionSummary[]): stri
   return sessions[0]?.id ?? "";
 }
 
+const SAFE_SESSIONS: { sessions: HermesSessionSummary[] } = { sessions: [] };
+
 export async function listSessions() {
-  return fetchJson<{ sessions: HermesSessionSummary[] }>("/sessions");
+  try {
+    return await fetchJson<{ sessions: HermesSessionSummary[] }>("/sessions");
+  } catch {
+    return SAFE_SESSIONS;
+  }
 }
 
 export async function getSession(id: string) {
-  return fetchJson<HermesSessionDetail>(`/sessions/${encodeURIComponent(id)}`);
+  return fetchJson<HermesSessionDetail>("/session", { query: { session_id: id } });
 }
 
 export async function deleteSession(id: string) {
-  return fetchJson("/sessions/delete", { method: "POST", body: { id } });
+  return fetchJson("/session/delete", { method: "POST", body: { session_id: id } });
 }
 
 export async function deleteAllSessions() {
-  return fetchJson("/sessions/delete-all", { method: "POST" });
+  return fetchJson("/sessions/cleanup", { method: "POST" });
 }
 
 export async function renameSessionOnFirstMessage(id: string, title: string) {
-  return fetchJson("/sessions/rename", { method: "POST", body: { id, title } });
+  return fetchJson("/session/rename", { method: "POST", body: { session_id: id, title } });
 }
 
 export async function ensureServerSessionId(id: string) {
@@ -44,7 +50,7 @@ export async function ensureServerSessionId(id: string) {
 }
 
 export async function pinSession(id: string, pinned: boolean) {
-  return fetchJson("/sessions/pin", { method: "POST", body: { id, pinned } });
+  return fetchJson("/session/pin", { method: "POST", body: { session_id: id, pinned } });
 }
 
 export async function searchSessions(params?: Record<string, unknown>) {
