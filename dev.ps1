@@ -1,7 +1,7 @@
 # dev.ps1 — Start Hermes backend + frontend dev servers in separate windows
 $ErrorActionPreference = 'Stop'
 
-$Port = if ($env:HERMES_WEBUI_PORT) { $env:HERMES_WEBUI_PORT } else { '8789' }
+$Port = if ($env:HERMES_WEBUI_PORT) { $env:HERMES_WEBUI_PORT } else { '8787' }
 $Home_ = if ($env:HERMES_HOME) { $env:HERMES_HOME } else { "$env:TEMP\hermes-dev-home" }
 $State = if ($env:HERMES_WEBUI_STATE_DIR) { $env:HERMES_WEBUI_STATE_DIR } else { "$env:TEMP\hermes-dev-state" }
 
