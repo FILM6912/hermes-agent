@@ -1,4 +1,4 @@
-"""Dynamic WebUI department definitions for org-scoped RAG access."""
+"""Dynamic WebUI department definitions."""
 
 from __future__ import annotations
 

@@ -23,7 +23,6 @@ from app.api.v1.endpoints import (
     notes,
     onboarding,
     personalities,
-    pipeline_test,
     profiles,
     projects,
     providers,
@@ -39,9 +38,7 @@ from app.api.v1.endpoints import (
     workspace,
 )
 
-from app.document_api.integration import get_document_api_router
 
-from app.api.storage_proxy import router as storage_proxy_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 # Native WebUI routes must register before the integrated document API router:
@@ -77,15 +74,9 @@ api_v1_router.include_router(notes.router)
 api_v1_router.include_router(commands.router)
 api_v1_router.include_router(personalities.router)
 api_v1_router.include_router(agent_actions.router)
-api_v1_router.include_router(pipeline_test.router)
-
-_doc_router = get_document_api_router()
-if _doc_router.routes:
-    api_v1_router.include_router(_doc_router)
 
 root_router = APIRouter()
 root_router.include_router(health.router)
-root_router.include_router(storage_proxy_router)
 root_router.include_router(api_v1_router)
 
 # Back-compat alias for app.main (Agent 1 imported `router`)

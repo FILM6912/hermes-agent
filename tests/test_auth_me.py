@@ -82,7 +82,7 @@ def test_auth_me_returns_supervisor_profile(isolated_state: Path) -> None:
     assert payload["role"] == "supervisor"
     assert payload["roles"] == ["supervisor"]
     assert payload["enabled"] is True
-    assert payload["permissions"].get("rag:approve") is True
+    assert payload["permissions"] == {}
 
 
 def test_auth_me_patch_display_name(isolated_state: Path) -> None:

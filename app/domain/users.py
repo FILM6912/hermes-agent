@@ -167,10 +167,7 @@ class UserAccess:
 
     @property
     def is_admin(self) -> bool:
-        from app.domain.roles import role_has_full_access
-
-        return role_has_full_access(self.role)
-
+        return self.role == "admin"
     @property
     def restricts_profiles(self) -> bool:
         from app.domain.roles import role_requires_profile
@@ -178,16 +175,13 @@ class UserAccess:
         return self.multi_user_enabled and role_requires_profile(self.role)
 
     def allowed_profile_names(self) -> tuple[str, ...]:
-        from app.domain.roles import role_requires_profile
-
-        if not self.multi_user_enabled or not role_requires_profile(self.role):
+        if not self.multi_user_enabled or self.role == "admin":
             return ()
         if self.profile_names:
             return self.profile_names
         if self.profile_name:
             return (self.profile_name,)
         return ("default",)
-
 
 def legacy_user_access() -> UserAccess:
     return UserAccess(multi_user_enabled=False)
@@ -615,9 +609,7 @@ def _sync_profile_bindings_for_user(
 
 
 def user_may_access_profile(profile_name: str, user: UserRecord | None) -> bool:
-    from app.domain.roles import role_requires_profile
-
-    if user is None or not role_requires_profile(user.role):
+    if user is None or user.role == "admin":
         return True
     from app.domain.profiles import _profiles_match
 

@@ -27,23 +27,21 @@ const inputClass =
 type CreateRoleForm = {
   label: string;
   description: string;
-  permissions: RolePermissions;
   requires_profile: boolean;
 };
 
 type EditRoleForm = CreateRoleForm & { id: string };
 
-function emptyCreateForm(catalog: PermissionCatalogEntry[] = []): CreateRoleForm {
+function emptyCreateForm(): CreateRoleForm {
   return {
     label: "",
     description: "",
-    permissions: emptyPermissions(catalog),
     requires_profile: true,
   };
 }
 
-function emptyEditForm(catalog: PermissionCatalogEntry[] = []): EditRoleForm {
-  return { id: "", ...emptyCreateForm(catalog) };
+function emptyEditForm(): EditRoleForm {
+  return { id: "", ...emptyCreateForm() };
 }
 
 export const RolesPanel: React.FC = () => {
@@ -62,14 +60,6 @@ export const RolesPanel: React.FC = () => {
     try {
       const data = await listRoles();
       setRoles(data.roles);
-      setCatalog(data.permissions);
-      setCreateForm((prev) => ({
-        ...prev,
-        permissions:
-          Object.keys(prev.permissions).length > 0
-            ? prev.permissions
-            : emptyPermissions(data.permissions),
-      }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load roles");
     } finally {
@@ -107,8 +97,8 @@ export const RolesPanel: React.FC = () => {
       const result = await createRole({
         label: createForm.label.trim(),
         description: createForm.description.trim() || null,
-        permissions: createForm.permissions,
         requires_profile: createForm.requires_profile,
+        permissions: createForm.permissions,
       });
       toast.success(`Created role ${result.role.id}`);
       setCreateForm(emptyCreateForm(catalog));
@@ -140,14 +130,9 @@ export const RolesPanel: React.FC = () => {
       toast.error("Label is required");
       return;
     }
-    if (!hasAnyPermission(editForm.permissions)) {
-      toast.error("Select at least one permission");
-      return;
-    }
     setActionPending(true);
     try {
-      const patch = buildRoleUpdatePatch(selected, editForm, catalog);
-      if (Object.keys(patch).length === 0) {
+      const patch = { label: editForm.label.trim(), description: editForm.description.trim() || null, requires_profile: editForm.requires_profile };      if (Object.keys(patch).length === 0) {
         toast.error("No changes to save");
         return;
       }
@@ -191,9 +176,6 @@ export const RolesPanel: React.FC = () => {
     onChange: (next: RolePermissions) => void,
     disabled?: boolean,
   ) => {
-    const general = catalog.filter((entry) => !entry.id.startsWith("rag:"));
-    const rag = catalog.filter((entry) => entry.id.startsWith("rag:"));
-
     const renderEntries = (entries: PermissionCatalogEntry[]) =>
       entries.map((entry) => (
         <label
@@ -230,16 +212,8 @@ export const RolesPanel: React.FC = () => {
               <span className="mt-0.5 block text-xs text-zinc-500">Grants every permission</span>
             </span>
           </label>
-          {renderEntries(general)}
+          {renderEntries(catalog)}
         </div>
-        {rag.length > 0 ? (
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-              RAG / Document knowledge base
-            </h3>
-            <div className="grid gap-2 sm:grid-cols-2">{renderEntries(rag)}</div>
-          </div>
-        ) : null}
       </div>
     );
   };
@@ -394,7 +368,7 @@ export const RolesPanel: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Roles</h2>
           <p className="text-sm text-zinc-500">
-            Define permissions per role as JSON-backed records in roles.json
+            Define role labels and profile binding here.
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -13,25 +13,11 @@
 
 - **Document API ASR:** Transcript audio now uses an HTTP OpenAI-compatible ``/v1/audio/transcriptions`` endpoint instead of local VibeVoice. Configure ``ASR_API_URL``, ``ASR_MODEL_ID`` (or ``ASR_MODEL``), and ``ASR_ENABLED=true`` in ``.env``.
 
-### Added
-
-- **MCP Bearer authentication:** Built-in document MCP at ``MCP_MOUNT_PATH`` (default ``/mcp``) and search tools now require ``Authorization: Bearer``. Set a permanent service key via ``MCP_API_KEY`` in ``.env`` (full admin RAG access). Per-user MCP keys can be issued with ``POST /api/v1/auth/me/mcp-key`` or ``POST /api/v1/admin/users/{email}/mcp-key``; each key inherits that account's RBAC (e.g. ``rag:search``).
-
-- **KM RAG approval audit columns:** ``GET /api/v1/documents`` and ``GET /api/v1/search/documents`` now include ``approved_by`` and ``approved_at`` per file (set when an admin commits ingest-pending). ``created_by`` preserves the uploader on admin commit.
-
-### Removed
-
-- **`file:approve` permission:** Unused RBAC flag (never enforced). Document ingest approval uses `rag:approve` instead; legacy `file:approve` keys in stored roles are ignored on load.
-
 ### Fixed
 
 - **Insights/Logs RBAC:** `/api/v1/insights` and `/api/v1/logs` now honor `insights:read` and `logs:read` instead of requiring admin. Non-admin viewers see only their own scope in the UI (no `/admin/users` call); admins retain the combined user scope dropdown.
 
 - **System health probe:** `GET /api/v1/system/health` and legacy `/api/system/health` are public (no session required) for monitoring and connectivity checks. Payload remains sanitized aggregate CPU/memory/disk metrics only.
-
-- **RAG storage URL rewrite at read time:** Search/chunk responses now rewrite markdown image links to the current `HERMES_WEBUI_PUBLIC_URL` (or origin-relative paths when unset) without re-ingesting documents. Change `.env` and restart to update displayed URLs immediately.
-
-- **Storage URL typo guard:** RAG read path and chat markdown rendering auto-correct ``/storage/v1/component/public/`` to ``/storage/v1/object/public/`` when models corrupt retrieved image links.
 
 - **Insights/Logs for built-in admin:** Users with the built-in `admin` role can open Insights and Logs even when those permission flags were revoked from the role map in Admin → Roles.
 

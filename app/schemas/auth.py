@@ -37,7 +37,6 @@ class AuthStatusResponse(BaseModel):
     department: str | None = None
     position: str | None = None
     role: str | None = None
-    permissions: dict[str, bool] = Field(default_factory=dict)
     profile_name: str | None = None
     profile_names: list[str] = Field(default_factory=list)
     multi_user: bool = False
@@ -87,7 +86,6 @@ class AuthMeResponse(BaseModel):
     enabled: bool = True
     role: str
     roles: list[str] = Field(default_factory=list)
-    permissions: dict[str, bool] = Field(default_factory=dict)
     department: str | None = None
     position: str | None = None
     profile_name: str | None = None
