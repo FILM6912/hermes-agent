@@ -26,6 +26,7 @@ npm run dev
 "@
 
 # Backend — foreground (this window)
+$env:HERMES_WEBUI_PORT = $Port
 Write-Host "[backend]  python bootstrap.py $Port -> http://127.0.0.1:$Port" -ForegroundColor Green
 Write-Host "`nPress Ctrl+C to stop backend.`n" -ForegroundColor DarkGray
 python bootstrap.py $Port
