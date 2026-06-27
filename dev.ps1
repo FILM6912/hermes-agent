@@ -17,14 +17,6 @@ New-Item -ItemType Directory -Force -Path $State | Out-Null
 
 $root = $PSScriptRoot
 
-# Backend — new window
-Write-Host "[backend]  python bootstrap.py  -> http://127.0.0.1:$Port" -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-Command", @"
-`$env:HERMES_HOME='$Home_'; `$env:HERMES_WEBUI_STATE_DIR='$State'; `$env:HERMES_WEBUI_PORT='$Port'
-Set-Location '$root'
-python bootstrap.py
-"@
-
 # Frontend — new window
 Write-Host "[frontend] npm run dev          -> http://localhost:5173"  -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-NoExit", "-Command", @"
@@ -33,4 +25,7 @@ Set-Location '$root\frontend'
 npm run dev
 "@
 
-Write-Host "`nBoth servers launched in separate windows.`n" -ForegroundColor Cyan
+# Backend — foreground (this window)
+Write-Host "[backend]  python bootstrap.py  -> http://127.0.0.1:$Port" -ForegroundColor Green
+Write-Host "`nPress Ctrl+C to stop backend.`n" -ForegroundColor DarkGray
+python bootstrap.py
