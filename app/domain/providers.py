@@ -42,6 +42,7 @@ from app.domain.config import (
     get_config,
     invalidate_models_cache,
     reload_config,
+    _custom_provider_name_slug,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,10 +54,16 @@ def _custom_provider_name_matches(provider_id: str, name: object) -> bool:
     raw_name = str(name or "").strip().lower()
     if not pid or not raw_name:
         return False
+    pid_slug = _custom_provider_name_slug(pid)
+    name_slug = _custom_provider_name_slug(raw_name)
+    if pid_slug and name_slug and pid_slug == name_slug:
+        return True
     slug = _custom_provider_slug_from_name(raw_name)
     candidates = {raw_name, f"custom:{raw_name}"}
     if slug:
         candidates.add(slug)
+    if pid_slug:
+        candidates.add(f"custom:{pid_slug}")
     return pid in candidates
 
 _OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"

@@ -179,6 +179,24 @@ if (-not $env:HERMES_WEBUI_STATE_DIR) {
     $env:HERMES_WEBUI_STATE_DIR = Join-Path $env:HERMES_HOME 'webui'
 }
 
+# === Load HERMES_HOME/.env (provider credentials for agent + WebUI) ========
+$hermesEnvFile = Join-Path $env:HERMES_HOME '.env'
+if (Test-Path $hermesEnvFile) {
+    foreach ($line in Get-Content $hermesEnvFile -Encoding UTF8) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#') -or -not $trimmed.Contains('=')) { continue }
+        $kv = $trimmed -split '=', 2
+        $key = ($kv[0].Trim() -replace '^export\s+', '')
+        if ($key -in @('UID', 'GID', 'EUID', 'EGID', 'PPID')) { continue }
+        if ($key -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { continue }
+        if ($null -ne [Environment]::GetEnvironmentVariable($key)) { continue }
+        $val = $kv[1]
+        if ($val -match '^"(.*)"$') { $val = $Matches[1] }
+        elseif ($val -match "^'(.*)'$") { $val = $Matches[1] }
+        [Environment]::SetEnvironmentVariable($key, $val)
+    }
+}
+
 # === Ensure dirs exist =================================================
 New-Item -ItemType Directory -Force -Path $env:HERMES_HOME | Out-Null
 New-Item -ItemType Directory -Force -Path $env:HERMES_WEBUI_STATE_DIR | Out-Null

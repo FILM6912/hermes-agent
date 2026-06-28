@@ -39,14 +39,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 def _platform_default_hermes_home() -> Path:
     """Return the platform-aware default Hermes home when HERMES_HOME is unset.
 
-    Native Windows Hermes Agent installs default to %LOCALAPPDATA%\\hermes,
-    while POSIX installs use ~/.hermes.
+    On Windows, prefer ``%USERPROFILE%\\.hermes`` when the Hermes CLI already
+    installed ``config.yaml`` or ``hermes-agent/`` there (matching ``start.ps1``).
+    Fall back to ``%LOCALAPPDATA%\\hermes`` for installer-only layouts, then
+    ``%USERPROFILE%\\.hermes`` as the final default.  POSIX installs use
+    ``~/.hermes``.
     """
-    if os.name == "nt":
-        local_app_data = os.getenv("LOCALAPPDATA", "").strip()
-        if local_app_data:
-            return Path(local_app_data) / "hermes"
-    return HOME / ".hermes"
+    dot_hermes = HOME / ".hermes"
+    if os.name != "nt":
+        return dot_hermes
+
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    local_hermes = Path(local_app_data) / "hermes" if local_app_data else None
+    dot_has_config = (dot_hermes / "config.yaml").exists()
+    dot_has_agent = (dot_hermes / "hermes-agent" / "hermes_cli").is_dir()
+    if dot_has_config or dot_has_agent:
+        return dot_hermes
+    if local_hermes is not None:
+        return local_hermes
+    return dot_hermes
 
 # ── Network config (env-overridable) ─────────────────────────────────────────
 HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")
