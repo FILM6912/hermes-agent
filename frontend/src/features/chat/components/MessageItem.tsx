@@ -314,7 +314,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                     <ActivityTimeline
                       steps={visibleSteps}
                       isStreaming={isStreaming && isLastMessage && isGenerating}
-                      showDoneStep={false}
                       onOpenToolInPanel={onOpenToolInPreview}
                     />
                   </div>
@@ -391,7 +390,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                   <ActivityTimeline
                     steps={thinking}
                     isStreaming={isStreaming && isLastMessage && isGenerating}
-                    showDoneStep={false}
                   />
                 ) : null}
                 {useActivity && tools.length > 0 ? (

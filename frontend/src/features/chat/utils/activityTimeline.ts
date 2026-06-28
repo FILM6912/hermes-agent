@@ -370,11 +370,3 @@ export function shouldUseActivityTimeline(steps: ProcessStep[]): boolean {
       s.type === "error",
   );
 }
-
-/** Hide the terminal "Done" row when the timeline includes reasoning. */
-export function activityTimelineShowsDone(steps: ProcessStep[]): boolean {
-  return (
-    thinkingStepsOnly(steps).length === 0 &&
-    toolStepsOnly(steps).length > 0
-  );
-}

@@ -2,7 +2,6 @@ import React from "react";
 import { createPortal } from "react-dom";
 import {
   Brain,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   FileCode2,
@@ -18,7 +17,6 @@ import type { ProcessStep } from "@/types";
 import {
   activityIconKind,
   activityStepTitle,
-  activityTimelineShowsDone,
   buildActivitySummary,
   shouldUseActivityTimeline,
   stepsToActivityRows,
@@ -34,8 +32,6 @@ export type ActivityTimelineProps = {
   defaultCollapsed?: boolean;
   /** grouped = collapsible timeline (legacy parity); inline = compact list (deprecated) */
   variant?: "grouped" | "inline";
-  /** When false, omit the terminal "Done" row (used for reasoning-only timelines). */
-  showDoneStep?: boolean;
   /** Open tool detail or todos in the workspace preview panel. */
   onOpenToolInPanel?: (step: ProcessStep) => void;
 };
@@ -388,26 +384,11 @@ const TimelineStep: React.FC<{
   );
 };
 
-const DoneStep: React.FC = () => {
-  const { t } = useLanguage();
-  return (
-    <div className="relative flex gap-2.5">
-      <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-        <CheckCircle2 className="h-4 w-4 text-emerald-500/90 dark:text-emerald-400/90" />
-      </span>
-      <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-        {t("chat.activityDone") || "Done"}
-      </span>
-    </div>
-  );
-};
-
 export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
   steps,
   isStreaming = false,
   defaultCollapsed = true,
   variant: _variant = "grouped",
-  showDoneStep,
   onOpenToolInPanel,
 }) => {
   const { t } = useLanguage();
@@ -443,17 +424,6 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
 
   const reasoningOnlySingleton =
     thinkingRows.length === 1 && toolRows.length === 0;
-
-  const allowDone =
-    showDoneStep ?? activityTimelineShowsDone(steps);
-  const showDone =
-    allowDone &&
-    !hasRunning &&
-    !isStreaming &&
-    toolRows.length > 0 &&
-    toolRows.every(
-      (r) => r.status === "completed" || r.status === "cancelled",
-    );
 
   if (reasoningOnlySingleton) {
     const step = thinkingStepsOnly(steps)[0];
@@ -506,9 +476,7 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
                   ? t("chat.thinking") || row.label
                   : row.detail || row.label;
                 const isLastRow =
-                  index === thinkingRows.length - 1 &&
-                  toolRows.length === 0 &&
-                  !showDone;
+                  index === thinkingRows.length - 1 && toolRows.length === 0;
                 return (
                   <ThinkingTimelineStep
                     key={row.id}
@@ -526,10 +494,9 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
                 row={row}
                 step={stepById.get(row.id)}
                 onOpenToolInPanel={onOpenToolInPanel}
-                isLast={index === toolRows.length - 1 && !showDone}
+                isLast={index === toolRows.length - 1}
               />
             ))}
-            {showDone ? <DoneStep /> : null}
           </div>
         </div>
       )}
