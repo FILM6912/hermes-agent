@@ -68,7 +68,7 @@ function getProvider(
   status: OnboardingStatus | null,
   id: string,
 ): OnboardingSetupProvider | undefined {
-  return status?.setup.providers.find((p) => p.id === id);
+  return status?.setup.providers?.find((p) => p.id === id);
 }
 
 function modelChoices(
@@ -515,10 +515,10 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
       currentProviderName === "openai-codex" &&
       !system.chat_ready;
 
-    const groupedOptions = setup.categories.length
-      ? setup.categories.map((cat) => {
+    const groupedOptions = (setup.categories?.length ?? 0)
+      ? setup.categories!.map((cat) => {
           const opts = cat.providers
-            .map((pid) => setup.providers.find((p) => p.id === pid))
+            .map((pid) => setup.providers?.find((p) => p.id === pid))
             .filter(Boolean) as OnboardingSetupProvider[];
           return (
             <optgroup key={cat.id} label={cat.label}>
@@ -531,7 +531,7 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
             </optgroup>
           );
         })
-      : setup.providers.map((p) => (
+      : (setup.providers ?? []).map((p) => (
           <option key={p.id} value={p.id}>
             {p.label}
           </option>
@@ -709,8 +709,8 @@ export const OnboardingOverlay: React.FC<OnboardingOverlayProps> = ({
   const renderWorkspaceStep = () => {
     if (!status) return null;
     const choices = modelChoices(status, provider, probe);
-    const workspaceOptions = status.workspaces.items.length
-      ? status.workspaces.items
+    const workspaceOptions = (status.workspaces?.items?.length ?? 0)
+      ? status.workspaces!.items
       : [{ name: "Home", path: workspace }];
 
     return (
