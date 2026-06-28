@@ -1,5 +1,6 @@
-import type { ChatSession, Message } from "@/types";
+import type { ChatSession, Message, ProcessStep } from "@/types";
 import { asString } from "@/services/hermes/chat";
+import { isDistinctThinking } from "@/services/hermes/streamDisplay";
 
 export function toolResultSnippetFromPayload(payload: Record<string, unknown>): string {
   const preview = asString(payload.preview).trim();
@@ -74,6 +75,76 @@ export function mapSessionSummariesToChatSessions(
   });
 }
 
+function messageTimestamp(raw: Record<string, unknown>): number {
+  if (typeof raw.timestamp === "number") return raw.timestamp;
+  if (typeof raw._ts === "number") return raw._ts * 1000;
+  return Date.now();
+}
+
+/** Visible assistant text from string or structured content[] (legacy ui.js parity). */
+export function extractHermesMessageContent(raw: Record<string, unknown>): string {
+  const content = raw.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part): part is Record<string, unknown> => !!part && typeof part === "object")
+    .filter((part) => {
+      const type = asString(part.type).toLowerCase();
+      return type === "text" || (!type && (part.text || part.content));
+    })
+    .map((part) => asString(part.text) || asString(part.content))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Reasoning trace from API `reasoning` or structured content[] blocks. */
+export function extractHermesMessageReasoning(
+  raw: Record<string, unknown>,
+  visibleContent: string,
+): string {
+  const topLevel =
+    asString(raw.reasoning).trim() || asString(raw.reasoning_content).trim();
+  if (topLevel) return topLevel;
+
+  const content = raw.content;
+  if (!Array.isArray(content)) return "";
+
+  return content
+    .filter((part): part is Record<string, unknown> => !!part && typeof part === "object")
+    .filter((part) => {
+      const type = asString(part.type).toLowerCase();
+      return type === "thinking" || type === "reasoning";
+    })
+    .map(
+      (part) =>
+        asString(part.thinking) ||
+        asString(part.reasoning) ||
+        asString(part.text),
+    )
+    .filter(Boolean)
+    .join("\n");
+}
+
+function thinkingStepFromReasoning(reasoning: string, index: number): ProcessStep {
+  return {
+    id: `thinking-hist-${index}`,
+    type: "thinking",
+    title: "Thinking",
+    content: reasoning,
+    status: "completed",
+  };
+}
+
+function mergeHistoryThinkingStep(
+  rawSteps: unknown,
+  reasoning: string,
+  index: number,
+): ProcessStep[] | undefined {
+  const steps = Array.isArray(rawSteps) ? (rawSteps as ProcessStep[]) : [];
+  if (steps.some((step) => step.type === "thinking")) return steps.length ? steps : undefined;
+  return [thinkingStepFromReasoning(reasoning, index), ...steps];
+}
+
 /**
  * Map raw Hermes messages → Message[].
  * ponytail: minimal mapping; extend when backend adds structured tool_calls/steps.
@@ -85,12 +156,23 @@ export function mapHermesMessagesToMessages(
   if (!Array.isArray(rawMessages)) return [];
   return rawMessages.map((m, i) => {
     const raw = (m ?? {}) as Record<string, unknown>;
+    const role = raw.role === "user" ? "user" : "assistant";
+    const content = extractHermesMessageContent(raw);
+    let steps = Array.isArray(raw.steps) ? (raw.steps as ProcessStep[]) : undefined;
+
+    if (role === "assistant") {
+      const reasoning = extractHermesMessageReasoning(raw, content);
+      if (reasoning && isDistinctThinking(reasoning, content)) {
+        steps = mergeHistoryThinkingStep(steps, reasoning, i);
+      }
+    }
+
     return {
       id: typeof raw.id === "string" ? raw.id : `msg-${i}`,
-      role: raw.role === "user" ? "user" : "assistant",
-      content: typeof raw.content === "string" ? raw.content : "",
-      timestamp: typeof raw.timestamp === "number" ? raw.timestamp : Date.now(),
-      steps: Array.isArray(raw.steps) ? raw.steps : undefined,
+      role,
+      content,
+      timestamp: messageTimestamp(raw),
+      steps,
     } as Message;
   });
 }

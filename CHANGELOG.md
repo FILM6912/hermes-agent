@@ -5,6 +5,10 @@
 
 ### Fixed
 
+- **React thinking on session reload:** Session message mapping now reads API `reasoning` / structured content blocks into completed `thinking` steps so the Thought Process card appears after refresh, matching legacy `static-legacy/ui.js`.
+
+- **React live reasoning stream:** Reasoning SSE token chunks concatenate with empty-string join (legacy `+=` parity) so thinking text no longer breaks mid-word across lines.
+
 - **Custom provider runtime warning:** WebUI chat no longer calls `hermes_cli.resolve_runtime_provider` for named `custom:*` providers that already resolve from `config.yaml`, avoiding spurious "Unknown provider 'custom:…'" warnings when display names contain punctuation (e.g. `Local (localhost)` → `custom:local-localhost`).
 
 ### Changed
