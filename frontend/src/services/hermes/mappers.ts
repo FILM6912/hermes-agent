@@ -1,4 +1,21 @@
 import type { ChatSession, Message } from "@/types";
+import { asString } from "@/services/hermes/chat";
+
+export function toolResultSnippetFromPayload(payload: Record<string, unknown>): string {
+  const preview = asString(payload.preview).trim();
+  if (preview) return preview;
+  const args = payload.args;
+  if (args && typeof args === "object") {
+    try {
+      return JSON.stringify(args, null, 2);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+export { asString };
 
 /**
  * Map a Hermes session detail (GET /session/:id) → ChatSession.
