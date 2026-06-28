@@ -1182,7 +1182,7 @@ def resolve_request_user_access(request: Request | None) -> UserAccess:
         )
 
     from app.domain.auth import parse_bearer_authorization
-    from app.document_api.mcp_auth import resolve_user_from_mcp_bearer
+    from app.domain.mcp_auth import resolve_user_from_mcp_bearer
 
     bearer = parse_bearer_authorization(request.headers.get("authorization"))
     mcp_user = resolve_user_from_mcp_bearer(bearer) if bearer else None

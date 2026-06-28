@@ -1460,7 +1460,7 @@ def _check_csrf(handler) -> bool:
         return True
     if bearer:
         try:
-            from app.document_api.mcp_auth import is_valid_mcp_bearer
+            from app.domain.mcp_auth import is_valid_mcp_bearer
 
             if is_valid_mcp_bearer(bearer):
                 return True
