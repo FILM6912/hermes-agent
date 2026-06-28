@@ -6,8 +6,15 @@ import type { ChatSession, Message } from "@/types";
  */
 export function mapSessionDetailToChatSession(value: unknown): ChatSession {
   const v = (value ?? {}) as Record<string, unknown>;
+  const id = String(v.session_id ?? v.id ?? "");
+  const activeStreamId =
+    typeof v.active_stream_id === "string"
+      ? v.active_stream_id
+      : typeof v.activeStreamId === "string"
+        ? v.activeStreamId
+        : undefined;
   return {
-    id: String(v.id ?? ""),
+    id,
     title: typeof v.title === "string" ? v.title : "Untitled",
     messages: Array.isArray(v.messages) ? mapHermesMessagesToMessages(v.messages) : [],
     updatedAt: typeof v.updated_at === "number" ? v.updated_at : Date.now(),
@@ -15,7 +22,8 @@ export function mapSessionDetailToChatSession(value: unknown): ChatSession {
     flowId: typeof v.model === "string" ? v.model : undefined,
     flowName: typeof v.model === "string" ? v.model : undefined,
     messageCount: typeof v.message_count === "number" ? v.message_count : undefined,
-    activeStreamId: typeof v.active_stream_id === "string" ? v.active_stream_id : undefined,
+    activeStreamId,
+    isStreaming: Boolean(activeStreamId),
     compressionAnchor: v.compression_anchor as ChatSession["compressionAnchor"],
     projectId: typeof v.project_id === "string" ? v.project_id : undefined,
   };
@@ -30,8 +38,11 @@ export function mapSessionSummariesToChatSessions(
   if (!Array.isArray(summaries)) return [];
   return summaries.map((s) => {
     const raw = (s ?? {}) as Record<string, unknown>;
+    const id = String(raw.session_id ?? raw.id ?? "");
+    const activeStreamId =
+      typeof raw.active_stream_id === "string" ? raw.active_stream_id : undefined;
     return {
-      id: String(raw.id ?? ""),
+      id,
       title: typeof raw.title === "string" ? raw.title : "Untitled",
       messages: [],
       updatedAt: typeof raw.updated_at === "number" ? raw.updated_at : Date.now(),
@@ -39,7 +50,8 @@ export function mapSessionSummariesToChatSessions(
       flowId: typeof raw.model === "string" ? raw.model : undefined,
       flowName: typeof raw.model === "string" ? raw.model : undefined,
       messageCount: typeof raw.message_count === "number" ? raw.message_count : 0,
-      activeStreamId: typeof raw.active_stream_id === "string" ? raw.active_stream_id : undefined,
+      activeStreamId,
+      isStreaming: Boolean(activeStreamId),
       projectId: typeof raw.project_id === "string" ? raw.project_id : undefined,
     } satisfies ChatSession;
   });
