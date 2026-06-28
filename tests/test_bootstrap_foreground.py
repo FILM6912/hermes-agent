@@ -484,3 +484,35 @@ class TestBuildServerLaunchArgv:
             "/usr/bin/python3", host="127.0.0.1", port=8787
         )
         assert argv == ["/usr/bin/python3", str(tmp_path / "server.py")]
+
+
+class TestNativeWindowsFallback:
+    def test_windows_launch_path_omits_posix_session_flag(self, import_bootstrap, monkeypatch, tmp_path):
+        monkeypatch.setattr(import_bootstrap.platform, "system", lambda: "Windows")
+        monkeypatch.setattr(sys, "argv", ["bootstrap.py", "--no-browser"])
+        monkeypatch.setattr(import_bootstrap, "ensure_supported_platform", lambda: None)
+        monkeypatch.setattr(import_bootstrap, "discover_agent_dir", lambda: tmp_path / "agent")
+        monkeypatch.setattr(import_bootstrap, "hermes_command_exists", lambda: True)
+        monkeypatch.setattr(import_bootstrap, "discover_launcher_python", lambda *a: "/usr/bin/python3")
+        monkeypatch.setattr(import_bootstrap, "ensure_python_has_webui_deps", lambda *a, **kw: a[0])
+        monkeypatch.setattr(import_bootstrap, "wait_for_health", lambda *a, **kw: True)
+        monkeypatch.setattr(import_bootstrap, "open_browser", lambda *a, **kw: None)
+        monkeypatch.setattr(os, "chdir", lambda p: None)
+        (tmp_path / "agent").mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("HERMES_WEBUI_STATE_DIR", str(tmp_path / "state"))
+
+        popen_calls = []
+
+        class FakePopen:
+            pid = 12345
+
+            def __init__(self, *args, **kwargs):
+                popen_calls.append((args, kwargs))
+
+        monkeypatch.setattr(subprocess, "Popen", FakePopen)
+
+        rc = import_bootstrap.main()
+
+        assert rc == 0
+        assert len(popen_calls) == 1
+        assert popen_calls[0][1].get("start_new_session") is None
