@@ -158,6 +158,27 @@ function parsePayload(raw: string): SsePayload {
   }
 }
 
+/** Map backend `apperror` SSE payload → assistant markdown (legacy messages.js parity). */
+export function formatApperrorAssistantContent(payload: SsePayload): string {
+  const errType = asString(payload.type);
+  const message = asString(payload.message, "An error occurred. Check server logs.");
+  const hint = asString(payload.hint).trim();
+
+  let label = "Error";
+  if (errType === "cancelled") label = "Task cancelled";
+  else if (errType === "interrupted") label = "Response interrupted";
+  else if (errType === "quota_exhausted") label = "Out of credits";
+  else if (errType === "rate_limit") label = "Rate limit reached";
+  else if (errType === "auth_mismatch") label = "Provider mismatch";
+  else if (errType === "model_not_found") label = "Model not found";
+  else if (errType === "no_response" || errType === "silent_failure") {
+    label = "No response from provider";
+  }
+
+  const hintSuffix = hint ? `\n\n*${hint}*` : "";
+  return `**${label}:** ${message}${hintSuffix}`;
+}
+
 /** Keep SSE open briefly after `stream_end` so late `title` events can arrive. */
 export function schedulePostStreamEndClose(
   source: EventSource,
@@ -274,6 +295,18 @@ export function wireChatEventSource(options: {
   });
 
   source.addEventListener("stream_close", () => {
+    handleStreamClose();
+  });
+
+  source.addEventListener("apperror", (event) => {
+    state.finished = true;
+    const payload = parsePayload((event as MessageEvent).data);
+    const content = formatApperrorAssistantContent(payload);
+    const delta = state.assistantText ? `\n\n${content}` : content;
+    state.assistantText += delta;
+    callbacks.push({ type: "text", content: delta });
+    pushAssistantSnapshot(state, callbacks);
+    callbacks.onStreamEnd?.();
     handleStreamClose();
   });
 

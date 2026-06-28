@@ -15,6 +15,8 @@
 
 ### Fixed
 
+- **React chat apperror visibility:** The Agent-UI SSE client now handles backend `apperror` events (provider init failures, missing API keys, rate limits, etc.) and renders an inline assistant error bubble, matching legacy `static-legacy/messages.js` behavior instead of leaving the stream hanging with no feedback.
+
 - **Insights/Logs RBAC:** `/api/v1/insights` and `/api/v1/logs` now honor `insights:read` and `logs:read` instead of requiring admin. Non-admin viewers see only their own scope in the UI (no `/admin/users` call); admins retain the combined user scope dropdown.
 
 - **System health probe:** `GET /api/v1/system/health` and legacy `/api/system/health` are public (no session required) for monitoring and connectivity checks. Payload remains sanitized aggregate CPU/memory/disk metrics only.
