@@ -339,6 +339,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                       onChange={handleChange}
                       className="w-full bg-transparent border-none outline-none text-zinc-900 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-600 ml-3 text-sm font-medium"
                       placeholder="Repeat password"
+                      autoComplete="new-password"
                       required={!isLogin}
                     />
                   </div>

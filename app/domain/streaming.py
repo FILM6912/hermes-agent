@@ -5567,11 +5567,11 @@ def _run_agent_streaming(
             # Pass the resolved provider so non-default providers get their own credentials.
             resolved_api_key = None
             try:
-                from app.domain.oauth import resolve_runtime_provider_with_anthropic_env_lock
-                from hermes_cli.runtime_provider import resolve_runtime_provider
-                _rt = resolve_runtime_provider_with_anthropic_env_lock(
-                    resolve_runtime_provider,
+                from app.domain.config import resolve_webui_runtime_provider
+
+                _rt = resolve_webui_runtime_provider(
                     requested=resolved_provider,
+                    config_obj=_runtime_cfg,
                 )
                 resolved_api_key = _rt.get("api_key")
                 if not resolved_provider:

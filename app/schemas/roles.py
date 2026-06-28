@@ -33,7 +33,6 @@ class RoleSummary(BaseModel):
     id: str
     label: str
     description: str | None = None
-    permissions: dict[str, bool] = Field(default_factory=dict)
     requires_profile: bool = False
     builtin: bool = False
     created_at: float | None = None

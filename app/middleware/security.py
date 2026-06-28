@@ -138,14 +138,6 @@ class AuthGateMiddleware(BaseHTTPMiddleware):
         denied = check_auth_request(request)
         if denied is not None:
             return denied
-        try:
-            from app.document_api.access import check_document_api_access
-
-            denied = check_document_api_access(request)
-            if denied is not None:
-                return denied
-        except Exception:
-            logger.debug("Document API access check failed", exc_info=True)
         return await call_next(request)
 
 
@@ -167,13 +159,6 @@ class CsrfMiddleware(BaseHTTPMiddleware):
             legacy_path = map_legacy_path(path)
         if _csrf_exempt_path(legacy_path):
             return await call_next(request)
-        try:
-            from app.document_api.integration import is_document_api_public_path
-
-            if is_document_api_public_path(path):
-                return await call_next(request)
-        except Exception:
-            pass
         if is_csp_report_post(legacy_path, request.method):
             return await call_next(request)
 

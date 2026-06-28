@@ -95,7 +95,7 @@ def append_turn_journal_event(
             fh.flush()
             os.fsync(fh.fileno())
     try:
-        dir_fd = os.open(path.parent, os.O_DIRECTORY)
+        dir_fd = os.open(path.parent, getattr(os, "O_DIRECTORY", 0))
         try:
             os.fsync(dir_fd)
         finally:

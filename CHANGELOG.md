@@ -3,6 +3,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **React chat stream parity (hermes-ui):** Live SSE now strips inline thinking tags from the assistant bubble, streams reasoning into the Thought Process panel separately, supports journal replay on reattach, clarify echo ordering, and `isFullText` transcript corrections — aligned with `hermes-ui` chat behavior.
+
+- **React thinking on session reload:** Session message mapping now reads API `reasoning` / structured content blocks into completed `thinking` steps so the Thought Process card appears after refresh, matching legacy `static-legacy/ui.js`.
+
+- **React live reasoning stream:** Reasoning SSE token chunks concatenate with empty-string join (legacy `+=` parity) so thinking text no longer breaks mid-word across lines.
+
+- **Custom provider runtime warning:** WebUI chat no longer calls `hermes_cli.resolve_runtime_provider` for named `custom:*` providers that already resolve from `config.yaml`, avoiding spurious "Unknown provider 'custom:…'" warnings when display names contain punctuation (e.g. `Local (localhost)` → `custom:local-localhost`).
+
 ### Changed
 
 - **Transcript audio report column:** After upload/process, the document API now generates ``audio_llm_report`` (formal Markdown report) via ``prompts/transcript_audio_report.md``, alongside ``audio_llm_summary``. ``created_by`` / ``updated_by`` on upload and process jobs are taken from the logged-in user, not form fields.
@@ -13,25 +23,17 @@
 
 - **Document API ASR:** Transcript audio now uses an HTTP OpenAI-compatible ``/v1/audio/transcriptions`` endpoint instead of local VibeVoice. Configure ``ASR_API_URL``, ``ASR_MODEL_ID`` (or ``ASR_MODEL``), and ``ASR_ENABLED=true`` in ``.env``.
 
-### Added
-
-- **MCP Bearer authentication:** Built-in document MCP at ``MCP_MOUNT_PATH`` (default ``/mcp``) and search tools now require ``Authorization: Bearer``. Set a permanent service key via ``MCP_API_KEY`` in ``.env`` (full admin RAG access). Per-user MCP keys can be issued with ``POST /api/v1/auth/me/mcp-key`` or ``POST /api/v1/admin/users/{email}/mcp-key``; each key inherits that account's RBAC (e.g. ``rag:search``).
-
-- **KM RAG approval audit columns:** ``GET /api/v1/documents`` and ``GET /api/v1/search/documents`` now include ``approved_by`` and ``approved_at`` per file (set when an admin commits ingest-pending). ``created_by`` preserves the uploader on admin commit.
-
-### Removed
-
-- **`file:approve` permission:** Unused RBAC flag (never enforced). Document ingest approval uses `rag:approve` instead; legacy `file:approve` keys in stored roles are ignored on load.
-
 ### Fixed
+
+- **Windows custom provider slug matching:** Named custom providers with punctuation in the display name (e.g. `Local (localhost)`) now resolve when the model picker emits the normalized slug `custom:local-localhost`, so chat streaming can load `custom_providers[].base_url` and API keys instead of failing with “Unknown provider” / missing `CUSTOM_*_API_KEY`.
+
+- **Windows `start.ps1` HERMES_HOME:** Prefer `%USERPROFILE%\.hermes` when Hermes CLI config or agent install exists there, instead of always defaulting to `%LOCALAPPDATA%\hermes` and splitting WebUI from CLI state.
+
+- **React chat apperror visibility:** The Agent-UI SSE client now handles backend `apperror` events (provider init failures, missing API keys, rate limits, etc.) and renders an inline assistant error bubble, matching legacy `static-legacy/messages.js` behavior instead of leaving the stream hanging with no feedback.
 
 - **Insights/Logs RBAC:** `/api/v1/insights` and `/api/v1/logs` now honor `insights:read` and `logs:read` instead of requiring admin. Non-admin viewers see only their own scope in the UI (no `/admin/users` call); admins retain the combined user scope dropdown.
 
 - **System health probe:** `GET /api/v1/system/health` and legacy `/api/system/health` are public (no session required) for monitoring and connectivity checks. Payload remains sanitized aggregate CPU/memory/disk metrics only.
-
-- **RAG storage URL rewrite at read time:** Search/chunk responses now rewrite markdown image links to the current `HERMES_WEBUI_PUBLIC_URL` (or origin-relative paths when unset) without re-ingesting documents. Change `.env` and restart to update displayed URLs immediately.
-
-- **Storage URL typo guard:** RAG read path and chat markdown rendering auto-correct ``/storage/v1/component/public/`` to ``/storage/v1/object/public/`` when models corrupt retrieved image links.
 
 - **Insights/Logs for built-in admin:** Users with the built-in `admin` role can open Insights and Logs even when those permission flags were revoked from the role map in Admin → Roles.
 

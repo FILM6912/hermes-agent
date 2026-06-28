@@ -45,8 +45,8 @@ def test_ensure_default_roles_creates_builtin_roles() -> None:
     assert "user" in roles
     assert "supervisor" in roles
     assert roles["admin"]["permissions"] == {"*": True}
-    assert roles["user"]["permissions"]["upload:file"] is True
-    assert roles["supervisor"]["permissions"]["rag:approve"] is True
+    assert roles["user"]["permissions"] == {}
+    assert roles["supervisor"]["permissions"] == {}
 
 
 def test_create_update_delete_custom_role() -> None:
@@ -61,10 +61,9 @@ def test_create_update_delete_custom_role() -> None:
     assert created["id"] == "reviewer"
     updated = update_role(
         "reviewer",
-        permissions={"rag:approve": True},
+        permissions={"workspace:read": False},
     )
-    assert updated["permissions"]["rag:approve"] is True
-    assert updated["permissions"]["workspace:read"] is True
+    assert updated["permissions"]["workspace:read"] is False
     assert updated["permissions"]["sessions:own"] is True
     delete_role("reviewer")
     with pytest.raises(RoleNotFoundError):
@@ -91,35 +90,33 @@ def test_update_role_merges_partial_permissions() -> None:
         label="Partial",
         permissions={"workspace:read": True, "chat:send": True},
     )
-    updated = update_role("partial-perms", permissions={"rag:ingest": True})
+    updated = update_role("partial-perms", permissions={"chat:send": False})
     assert updated["permissions"]["workspace:read"] is True
-    assert updated["permissions"]["chat:send"] is True
-    assert updated["permissions"]["rag:ingest"] is True
+    assert updated["permissions"]["chat:send"] is False
     delete_role(created["id"])
 
 
 def test_update_role_revokes_permission_from_wildcard_role() -> None:
     ensure_default_roles()
-    updated = update_role("admin", permissions={"rag:ingest": False})
+    updated = update_role("admin", permissions={"users:manage": False})
     perms = updated["permissions"]
     assert "*" not in perms
-    assert perms["rag:ingest"] is False
+    assert perms["users:manage"] is False
     assert perms["users:manage"] is True
     ensure_default_roles()
     persisted = get_role("admin").permissions
     assert "*" not in persisted
-    assert persisted["rag:ingest"] is False
+    assert persisted["users:manage"] is False
     assert role_has_permission("admin", "users:manage") is True
-    assert role_has_permission("admin", "rag:ingest") is False
+    assert role_has_permission("admin", "users:manage") is False
     update_role("admin", permissions={"*": True})
 
 
 def test_update_role_revokes_single_permission_from_granular_role() -> None:
     ensure_default_roles()
-    updated = update_role("supervisor", permissions={"rag:approve": False})
-    assert updated["permissions"]["rag:approve"] is False
-    assert role_has_permission("supervisor", "rag:approve") is False
-    update_role("supervisor", permissions={"rag:approve": True})
+    updated = update_role("supervisor", permissions={"upload:file": True})
+    assert updated["permissions"]["upload:file"] is True
+    assert role_has_permission("supervisor", "upload:file") is True
 
 
 def test_builtin_role_cannot_be_deleted() -> None:
@@ -131,11 +128,9 @@ def test_builtin_role_cannot_be_deleted() -> None:
 def test_role_has_permission_wildcard_and_specific() -> None:
     ensure_default_roles()
     assert role_has_permission("admin", "upload:file") is True
-    assert role_has_permission("user", "upload:file") is True
-    assert role_has_permission("user", "rag:ingest") is True
-    assert role_has_permission("user", "rag:approve") is False
+    assert role_has_permission("user", "upload:file") is False
     assert role_has_permission("user", "users:manage") is False
-    assert role_has_permission("supervisor", "rag:approve") is True
+    assert role_has_permission("supervisor", "upload:file") is False
     assert role_has_permission("supervisor", "users:manage") is False
 
 
@@ -154,9 +149,9 @@ def test_roles_json_persists_permissions_map() -> None:
 
 
 def test_coerce_permissions_map_ignores_removed_catalog_keys() -> None:
-    perms = coerce_permissions_map({"file:approve": True, "rag:search": True})
+    perms = coerce_permissions_map({"file:approve": True, "workspace:read": True})
     assert "file:approve" not in perms
-    assert perms["rag:search"] is True
+    assert perms["workspace:read"] is True
 
 
 def test_get_role_exposes_permission_map() -> None:

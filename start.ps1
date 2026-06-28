@@ -160,14 +160,41 @@ $PortFinal = if ($Port) {
 $env:HERMES_WEBUI_HOST = $BindHostFinal
 $env:HERMES_WEBUI_PORT = "$PortFinal"
 if (-not $env:HERMES_HOME) {
-    if ($env:LOCALAPPDATA) {
-        $env:HERMES_HOME = Join-Path $env:LOCALAPPDATA 'hermes'
+    # Prefer ~/.hermes when Hermes CLI already installed config there. start.ps1
+    # previously defaulted to %LOCALAPPDATA%\hermes, which split WebUI state
+    # from the CLI's config.yaml/auth.json under the user's profile dir.
+    $dotHermes = Join-Path $env:USERPROFILE '.hermes'
+    $localHermes = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'hermes' } else { $null }
+    $dotHermesHasConfig = Test-Path (Join-Path $dotHermes 'config.yaml')
+    $dotHermesHasAgent = Test-Path (Join-Path $dotHermes 'hermes-agent\hermes_cli') -PathType Container
+    if ($dotHermesHasConfig -or $dotHermesHasAgent) {
+        $env:HERMES_HOME = $dotHermes
+    } elseif ($localHermes) {
+        $env:HERMES_HOME = $localHermes
     } else {
-        $env:HERMES_HOME = Join-Path $env:USERPROFILE '.hermes'
+        $env:HERMES_HOME = $dotHermes
     }
 }
 if (-not $env:HERMES_WEBUI_STATE_DIR) {
     $env:HERMES_WEBUI_STATE_DIR = Join-Path $env:HERMES_HOME 'webui'
+}
+
+# === Load HERMES_HOME/.env (provider credentials for agent + WebUI) ========
+$hermesEnvFile = Join-Path $env:HERMES_HOME '.env'
+if (Test-Path $hermesEnvFile) {
+    foreach ($line in Get-Content $hermesEnvFile -Encoding UTF8) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#') -or -not $trimmed.Contains('=')) { continue }
+        $kv = $trimmed -split '=', 2
+        $key = ($kv[0].Trim() -replace '^export\s+', '')
+        if ($key -in @('UID', 'GID', 'EUID', 'EGID', 'PPID')) { continue }
+        if ($key -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') { continue }
+        if ($null -ne [Environment]::GetEnvironmentVariable($key)) { continue }
+        $val = $kv[1]
+        if ($val -match '^"(.*)"$') { $val = $Matches[1] }
+        elseif ($val -match "^'(.*)'$") { $val = $Matches[1] }
+        [Environment]::SetEnvironmentVariable($key, $val)
+    }
 }
 
 # === Ensure dirs exist =================================================

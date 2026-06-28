@@ -262,7 +262,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (!existing) return row;
         return {
           ...row,
-          messages: existing.messages.length > 0 ? existing.messages : row.messages,
+          messages:
+            (existing.messages?.length ?? 0) > 0
+              ? existing.messages!
+              : row.messages ?? [],
           flowName: existing.flowName ?? row.flowName,
           pinned: row.pinned ?? existing.pinned,
           ...reconcileSessionStreamMetadata(existing, row),
@@ -560,9 +563,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span className="min-w-0 flex-1 truncate font-medium">
                           {session.title || "Untitled Chat"}
                         </span>
-                        {(session.messageCount ?? session.messages.length) > 0 && (
+                        {(session.messageCount ?? session.messages?.length ?? 0) > 0 && (
                           <span className="shrink-0 text-[10px] tabular-nums text-zinc-500 dark:text-zinc-700">
-                            {session.messageCount ?? session.messages.length}
+                            {session.messageCount ?? session.messages?.length ?? 0}
                           </span>
                         )}
                       </div>

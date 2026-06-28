@@ -84,10 +84,7 @@ def get_current_user(request: Request) -> CurrentUser | None:
         if not is_multi_user_enabled():
             return CurrentUser.legacy_admin()
         return CurrentUser.from_access(resolve_request_user_access(request))
-
-    from app.document_api.mcp_auth import resolve_authenticated_user_for_mcp
-
-    return resolve_authenticated_user_for_mcp(request)
+    return None
 
 
 def require_current_user(request: Request) -> CurrentUser:
@@ -101,15 +98,7 @@ def require_current_user(request: Request) -> CurrentUser:
 
 
 def user_has_permission(user: CurrentUser | None, permission: str) -> bool:
-    """Return True when the user's role grants *permission* (or wildcard)."""
-    if user is None:
-        return False
-    if not is_multi_user_enabled():
-        return True
-    from app.domain.roles import role_has_permission
-
-    return role_has_permission(user.role, permission)
-
+    return False
 
 def resolve_user_permissions(user: CurrentUser | None) -> dict[str, bool]:
     if user is None:
@@ -135,18 +124,7 @@ def require_permission(request: Request, permission: str) -> CurrentUser:
 
 
 def require_admin(request: Request) -> CurrentUser:
-    """Return a user with admin-level access or raise HTTPException(401/403)."""
-    from fastapi import HTTPException
-
-    user = require_current_user(request)
-    if not (
-        user.is_admin
-        or user_has_permission(user, "users:manage")
-        or user_has_permission(user, "roles:manage")
-    ):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
-
+    return require_current_user(request)
 
 class AgentSoulAccessError(PermissionError):
     """Raised when a non-admin attempts Agent Soul (SOUL.md) operations."""
@@ -485,20 +463,6 @@ def spa_login_redirect_url(app_path: str) -> str:
 def is_public_path(path: str) -> bool:
     if path in PUBLIC_PATHS:
         return True
-    try:
-        from app.api.storage_proxy import is_supabase_storage_public_path
-
-        if is_supabase_storage_public_path(path):
-            return True
-    except Exception:
-        pass
-    try:
-        from app.document_api.integration import is_document_api_public_path
-
-        if is_document_api_public_path(path):
-            return True
-    except Exception:
-        pass
     if is_spa_shell_path(path):
         return True
     if path.startswith("/static/") or path.startswith("/session/static/"):
@@ -533,41 +497,6 @@ def check_auth_request(request: Request) -> Response | None:
         return None
 
     raw_path = request.url.path
-    try:
-        from app.api.storage_proxy import is_supabase_storage_public_path
-
-        if is_supabase_storage_public_path(raw_path):
-            return None
-    except Exception:
-        pass
-    try:
-        from app.document_api.integration import is_document_api_public_path
-
-        if is_document_api_public_path(raw_path):
-            return None
-    except Exception:
-        pass
-
-    try:
-        from app.document_api.mcp_integration import is_mcp_mount_path
-        from app.document_api.mcp_auth import mcp_mount_requires_bearer, resolve_authenticated_user_for_mcp
-
-        if is_mcp_mount_path(raw_path):
-            if not mcp_mount_requires_bearer():
-                return None
-            if resolve_authenticated_user_for_mcp(request) is None:
-                return JSONResponse(
-                    {
-                        "error": (
-                            "Authentication required — send "
-                            "Authorization: Bearer <MCP_API_KEY or user MCP key>"
-                        )
-                    },
-                    status_code=401,
-                )
-            return None
-    except Exception:
-        pass
 
     path = request_legacy_path(request)
     if is_public_path(path):

@@ -42,14 +42,6 @@ PERMISSION_CATALOG: dict[str, str] = {
     "logs:read": "View server logs",
     "agent_soul:access": "Access Agent Soul (SOUL.md)",
     "workspaces:manage": "Manage shared workspace folders",
-    "rag:ingest": "Ingest documents into RAG (upload / jobs)",
-    "rag:search": "Search and list RAG documents",
-    "rag:approve": "Approve pending RAG ingest (commit to vector store)",
-    "rag:manage": "Manage RAG documents (delete, rename, reject, cancel jobs)",
-    "transcript-report:read": "View transcript audio reports (same department)",
-    "transcript-report:create": "Upload transcript audio (same department)",
-    "transcript-report:edit": "Process/re-transcribe transcript audio (same department)",
-    "transcript-report:delete": "Delete transcript audio rows (same department)",
 }
 
 _DEFAULT_USER_PERMISSIONS = [
@@ -59,11 +51,6 @@ _DEFAULT_USER_PERMISSIONS = [
     "workspace:write",
     "sessions:own",
     "settings:personal",
-    "rag:ingest",
-    "rag:search",
-    "transcript-report:read",
-    "transcript-report:create",
-    "transcript-report:edit",
 ]
 
 _DEFAULT_SUPERVISOR_PERMISSIONS = [
@@ -72,13 +59,6 @@ _DEFAULT_SUPERVISOR_PERMISSIONS = [
     "workspace:read",
     "sessions:own",
     "settings:personal",
-    "rag:ingest",
-    "rag:search",
-    "rag:approve",
-    "transcript-report:read",
-    "transcript-report:create",
-    "transcript-report:edit",
-    "transcript-report:delete",
 ]
 
 DEFAULT_ROLES: dict[str, dict[str, Any]] = {
@@ -101,8 +81,8 @@ DEFAULT_ROLES: dict[str, dict[str, Any]] = {
         "builtin": True,
     },
     _BUILTIN_SUPERVISOR: {
-        "label": "หัวหน้า",
-        "description": "Supervisor — approve RAG ingest and search",
+        "label": "supervisor",
+        "description": "Supervisor - approve uploads and search",
         "permissions": {
             key: (key in _DEFAULT_SUPERVISOR_PERMISSIONS)
             for key in PERMISSION_CATALOG

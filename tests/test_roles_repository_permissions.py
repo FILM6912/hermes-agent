@@ -17,7 +17,7 @@ from app.storage.repositories.roles import _permissions_for_write, _row_to_domai
 
 def test_coerce_permissions_map_accepts_list_and_dict() -> None:
     assert coerce_permissions_map(["*"]) == {"*": True}
-    assert permission_granted(coerce_permissions_map(["rag:search"]), "rag:search") is True
+    assert permission_granted(coerce_permissions_map(["workspace:read"]), "workspace:read") is True
     assert coerce_permissions_map(
         {"users:manage": True, "profiles:manage": False},
     ) == {"users:manage": True, "profiles:manage": False}
@@ -39,8 +39,8 @@ def test_permissions_for_write_uses_json_object_on_postgres() -> None:
 
 
 def test_permissions_for_write_uses_json_text_on_sqlite() -> None:
-    value = _permissions_for_write({"rag:ingest": True}, SQLITE)
-    assert json.loads(value) == {"rag:ingest": True}
+    value = _permissions_for_write({"workspace:read": True}, SQLITE)
+    assert json.loads(value) == {"workspace:read": True}
 
 
 def test_row_to_domain_keeps_permissions_as_json_map() -> None:

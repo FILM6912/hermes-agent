@@ -39,14 +39,25 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 def _platform_default_hermes_home() -> Path:
     """Return the platform-aware default Hermes home when HERMES_HOME is unset.
 
-    Native Windows Hermes Agent installs default to %LOCALAPPDATA%\\hermes,
-    while POSIX installs use ~/.hermes.
+    On Windows, prefer ``%USERPROFILE%\\.hermes`` when the Hermes CLI already
+    installed ``config.yaml`` or ``hermes-agent/`` there (matching ``start.ps1``).
+    Fall back to ``%LOCALAPPDATA%\\hermes`` for installer-only layouts, then
+    ``%USERPROFILE%\\.hermes`` as the final default.  POSIX installs use
+    ``~/.hermes``.
     """
-    if os.name == "nt":
-        local_app_data = os.getenv("LOCALAPPDATA", "").strip()
-        if local_app_data:
-            return Path(local_app_data) / "hermes"
-    return HOME / ".hermes"
+    dot_hermes = HOME / ".hermes"
+    if os.name != "nt":
+        return dot_hermes
+
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    local_hermes = Path(local_app_data) / "hermes" if local_app_data else None
+    dot_has_config = (dot_hermes / "config.yaml").exists()
+    dot_has_agent = (dot_hermes / "hermes-agent" / "hermes_cli").is_dir()
+    if dot_has_config or dot_has_agent:
+        return dot_hermes
+    if local_hermes is not None:
+        return local_hermes
+    return dot_hermes
 
 # ── Network config (env-overridable) ─────────────────────────────────────────
 HOST = os.getenv("HERMES_WEBUI_HOST", "127.0.0.1")
@@ -1015,17 +1026,34 @@ def _resolve_provider_alias(name: str) -> str:
     return _PROVIDER_ALIASES.get(raw, name)
 
 
-def _custom_provider_slug_from_name(name: object) -> str:
+def _custom_provider_name_slug(name: object) -> str:
+    """Normalize a custom provider display name or ``custom:*`` id for lookup.
+
+    Collapses punctuation (parentheses, spaces) to hyphens so
+    ``Local (localhost)``, ``custom:local-localhost``, and
+    ``custom:local-(localhost)`` compare equal.  Endpoint-authority slugs
+    like ``10.8.71.41:8080`` become ``10.8.71.41-8080`` here; callers that
+    must preserve ``custom:<host>:<port>`` grammar should not route through
+    this helper for the final provider id.
+    """
     raw = str(name or "").strip().lower()
     if not raw:
         return ""
     if raw.startswith("custom:"):
-        return raw
-    # Keep name-derived custom provider slugs out of the @provider:model colon
-    # grammar. Endpoint-derived slugs may still be custom:<host>:<port>, but a
-    # friendly name like "Local (127.0.0.1:15721)" should not preserve ':'.
+        raw = raw.split(":", 1)[1].strip()
     slug = re.sub(r"[^a-z0-9._-]+", "-", raw).strip("-")
-    slug = re.sub(r"-{2,}", "-", slug)
+    return re.sub(r"-{2,}", "-", slug)
+
+
+def _custom_provider_slug_from_name(name: object) -> str:
+    raw = str(name or "").strip().lower()
+    if not raw:
+        return ""
+    # Preserve endpoint-authority slugs (custom:<host>:<port>) for @provider:model
+    # routing; friendly names like "Local (127.0.0.1:15721)" slug separately.
+    if raw.startswith("custom:") and raw.count(":") >= 2:
+        return raw
+    slug = _custom_provider_name_slug(raw)
     if not slug:
         return ""
     return "custom:" + slug
@@ -1057,13 +1085,14 @@ def _named_custom_provider_slug_for_provider(
     raw = str(provider or "").strip().lower()
     if not raw:
         return ""
-    raw_suffix = raw.removeprefix("custom:")
+    raw_suffix = _custom_provider_name_slug(raw)
     for entry in _custom_provider_entries(config_obj):
         entry_name = str(entry.get("name") or "").strip().lower()
         slug = _custom_provider_slug_from_name(entry_name)
         if not entry_name or not slug:
             continue
-        if raw in {entry_name, slug} or raw_suffix == slug.removeprefix("custom:"):
+        slug_suffix = _custom_provider_name_slug(slug)
+        if raw in {entry_name, slug} or raw_suffix == slug_suffix:
             return slug
     return ""
 
@@ -2137,6 +2166,41 @@ def resolve_model_provider(model_id: str, config_obj: dict | None = None) -> tup
     return model_id, config_provider, config_base_url
 
 
+def resolve_webui_runtime_provider(
+    requested: str | None = None,
+    config_obj: dict | None = None,
+    **kwargs,
+) -> dict:
+    """Resolve runtime credentials for WebUI agent startup.
+
+    Named ``custom:*`` providers are resolved from ``config.yaml`` first.
+    ``hermes_cli.runtime_provider`` normalizes display names differently
+    (e.g. ``Local (localhost)`` → ``custom:local-(localhost)``) than the
+    WebUI model picker (``custom:local-localhost``), so a direct CLI lookup
+    raises "Unknown provider" even when the WebUI config is valid.
+    """
+    pid = str(requested or "").strip()
+    if pid.lower().startswith("custom:"):
+        cp_key, cp_base = resolve_custom_provider_connection(pid, config_obj)
+        if cp_key or cp_base:
+            return {
+                "provider": pid,
+                "api_key": cp_key,
+                "base_url": cp_base,
+                "source": "webui_custom_provider",
+                "requested_provider": pid,
+            }
+
+    from app.domain.oauth import resolve_runtime_provider_with_anthropic_env_lock
+    from hermes_cli.runtime_provider import resolve_runtime_provider
+
+    return resolve_runtime_provider_with_anthropic_env_lock(
+        resolve_runtime_provider,
+        requested=requested,
+        **kwargs,
+    )
+
+
 def resolve_custom_provider_connection(
     provider_id: str,
     config_obj: dict | None = None,
@@ -2151,13 +2215,7 @@ def resolve_custom_provider_connection(
     if not pid.startswith("custom:"):
         return None, None
 
-    def _slugify(value: str) -> str:
-        s = str(value or "").strip().lower().replace("_", "-").replace(" ", "-")
-        while "--" in s:
-            s = s.replace("--", "-")
-        return s.strip("-")
-
-    slug = _slugify(pid.split(":", 1)[1].strip())
+    slug = _custom_provider_name_slug(pid)
     if not slug:
         return None, None
 
@@ -2190,7 +2248,7 @@ def resolve_custom_provider_connection(
         name = str(entry.get("name") or "").strip()
         if not name:
             continue
-        entry_slug = _slugify(name)
+        entry_slug = _custom_provider_name_slug(name)
         if entry_slug != slug:
             continue
 

@@ -39,9 +39,6 @@ _LEGACY_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_startup(app)
-    from app.document_api.integration import startup_document_api
-
-    await startup_document_api()
     yield
     run_shutdown()
 
@@ -166,9 +163,6 @@ def create_app() -> FastAPI:
 
     app.include_router(root_router)
 
-    from app.document_api.mcp_integration import mount_document_mcp
-
-    mount_document_mcp(app)
     _configure_openapi(app)
 
     @app.get("/docs", include_in_schema=False)

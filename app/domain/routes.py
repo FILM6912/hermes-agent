@@ -1460,7 +1460,7 @@ def _check_csrf(handler) -> bool:
         return True
     if bearer:
         try:
-            from app.document_api.mcp_auth import is_valid_mcp_bearer
+            from app.domain.mcp_auth import is_valid_mcp_bearer
 
             if is_valid_mcp_bearer(bearer):
                 return True
@@ -9895,13 +9895,9 @@ def _handle_chat_sync(handler, body):
             # Resolve API key via Hermes runtime provider (matches gateway behaviour)
             _api_key = None
             try:
-                from app.domain.oauth import resolve_runtime_provider_with_anthropic_env_lock
-                from hermes_cli.runtime_provider import resolve_runtime_provider
+                from app.domain.config import resolve_webui_runtime_provider
 
-                _rt = resolve_runtime_provider_with_anthropic_env_lock(
-                    resolve_runtime_provider,
-                    requested=_provider,
-                )
+                _rt = resolve_webui_runtime_provider(requested=_provider)
                 _api_key = _rt.get("api_key")
                 # Also use runtime provider/base_url if the webui config didn't resolve them
                 if not _provider:

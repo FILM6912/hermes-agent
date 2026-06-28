@@ -27,6 +27,7 @@ export interface AuthStatus {
   passkey_feature_flag: boolean;
   csrf_token?: string;
   csrfToken?: string;
+  access_token?: string;
 }
 
 export interface AccountProfile {

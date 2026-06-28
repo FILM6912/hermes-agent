@@ -93,11 +93,9 @@ def is_wsl() -> bool:
 
 
 def ensure_supported_platform() -> None:
-    if platform.system() == "Windows" and not is_wsl():
-        raise RuntimeError(
-            "Native Windows is not supported for this bootstrap yet. "
-            "Please run it from Linux, macOS, or inside WSL2."
-        )
+    # Native Windows is supported with a reduced launcher path:
+    # no bash-based auto-install, and no POSIX-only process-group flags.
+    return
 
 
 def _agent_dir_from_hermes_cli() -> Path | None:
@@ -176,7 +174,14 @@ def discover_launcher_python(agent_dir: Path | None) -> str:
 
 
 def _python_can_run_webui_and_agent(python_exe: str, agent_dir: Path | None = None) -> bool:
-    script = "import yaml\nfrom run_agent import AIAgent\n"
+    # When no agent directory is available (e.g. native Windows without the
+    # Hermes Agent installed), only check the WebUI core dependency (pyyaml).
+    # The server starts gracefully without the agent — chat features are
+    # disabled but the FastAPI app, health endpoint, and frontend proxy work.
+    if agent_dir:
+        script = "import yaml\nfrom run_agent import AIAgent\n"
+    else:
+        script = "import yaml\n"
     env = os.environ.copy()
     if agent_dir:
         # PREPEND agent_dir to PYTHONPATH so an `agent_dir/run_agent.py` wins
@@ -272,6 +277,12 @@ def hermes_command_exists() -> bool:
 
 
 def install_hermes_agent() -> None:
+    if platform.system() == "Windows":
+        raise RuntimeError(
+            "Hermes Agent is not available yet on native Windows bootstrap. "
+            "Install Hermes Agent in WSL2/Linux, or set HERMES_WEBUI_AGENT_DIR "
+            "and HERMES_WEBUI_PYTHON to an existing Hermes Agent environment."
+        )
     info(f"Hermes Agent not found. Attempting install via {INSTALLER_URL}")
     subprocess.run(
         ["/bin/bash", "-lc", f"curl -fsSL {INSTALLER_URL} | bash"], check=True
@@ -286,7 +297,8 @@ def wait_for_health(url: str, timeout: float = 25.0) -> bool:
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=2) as response:  # nosec B310
-                if b'"status": "ok"' in response.read():
+                body = response.read()
+                if b'"status":"ok"' in body or b'"status": "ok"' in body:
                     return True
         except Exception:
             time.sleep(0.4)
@@ -434,12 +446,22 @@ def main() -> int:
 
     agent_dir = discover_agent_dir()
     if not agent_dir and not hermes_command_exists():
-        if args.skip_agent_install:
+        if platform.system() == "Windows":
+            # On native Windows, the Hermes Agent CLI installer is bash-only.
+            # Allow the WebUI to start without the agent — the server handles
+            # the missing agent gracefully (chat/agent features disabled, but
+            # the FastAPI app, health endpoint, and frontend proxy all work).
+            info(
+                "Hermes Agent not found (agent features will be unavailable). "
+                "Set HERMES_WEBUI_AGENT_DIR to enable agent features."
+            )
+        elif args.skip_agent_install:
             raise RuntimeError(
                 "Hermes Agent was not found and auto-install was disabled."
             )
-        install_hermes_agent()
-        agent_dir = discover_agent_dir()
+        else:
+            install_hermes_agent()
+            agent_dir = discover_agent_dir()
 
     python_exe = ensure_python_has_webui_deps(discover_launcher_python(agent_dir), agent_dir)
     state_dir = Path(
@@ -480,7 +502,13 @@ def main() -> int:
         # raises OSError, the wrapper catches and SystemExit(1)s, and the
         # supervisor restarts — looping forever, exactly the failure mode this
         # PR is meant to eliminate. Convert to a single visible error.
-        if not os.access(python_exe, os.X_OK):
+        # On Windows, os.access(X_OK) is unreliable for .exe files — check
+        # existence instead; the OS handles executability via file extension.
+        if platform.system() == "Windows":
+            can_exec = os.path.isfile(python_exe)
+        else:
+            can_exec = os.access(python_exe, os.X_OK)
+        if not can_exec:
             raise RuntimeError(
                 f"Python interpreter at {python_exe!r} is not executable. "
                 f"Set HERMES_WEBUI_PYTHON to a working interpreter or fix "
@@ -498,13 +526,17 @@ def main() -> int:
 
     info(f"Starting Hermes Web UI on http://{args.host}:{args.port}")
     with log_path.open("ab") as log_file:
+        popen_kwargs = {
+            "cwd": server_cwd,
+            "env": os.environ.copy(),
+            "stdout": log_file,
+            "stderr": subprocess.STDOUT,
+        }
+        if platform.system() != "Windows":
+            popen_kwargs["start_new_session"] = True
         proc = subprocess.Popen(
             launch_argv,
-            cwd=server_cwd,
-            env=os.environ.copy(),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
+            **popen_kwargs,
         )
 
     health_url = f"http://{args.host}:{args.port}/health"

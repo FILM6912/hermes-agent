@@ -93,6 +93,20 @@ def test_append_turn_journal_event_still_writes_when_fcntl_unavailable(tmp_path,
     assert result["events"][0]["turn_id"] == "turn-no-fcntl"
 
 
+def test_append_turn_journal_event_without_o_directory(tmp_path, monkeypatch):
+    """Regression: Windows has no os.O_DIRECTORY; parent dir fsync must not crash."""
+    monkeypatch.delattr(turn_journal.os, "O_DIRECTORY", raising=False)
+
+    append_turn_journal_event(
+        "sid-win",
+        {"event": "submitted", "turn_id": "turn-win", "content": "hello"},
+        session_dir=tmp_path,
+    )
+
+    result = read_turn_journal("sid-win", session_dir=tmp_path)
+    assert result["events"][0]["turn_id"] == "turn-win"
+
+
 def test_derive_turn_journal_states_keeps_latest_event_per_turn():
     states, _ = derive_turn_journal_states([
         {"event": "submitted", "turn_id": "turn-1", "created_at": 1},

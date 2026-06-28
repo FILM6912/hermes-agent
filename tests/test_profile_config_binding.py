@@ -100,3 +100,72 @@ def test_resolve_custom_provider_connection_honors_profile_config():
         )
         assert api_key == "test-key"
         assert base_url == "http://192.168.99.1:8080/v1"
+
+
+def test_resolve_custom_provider_connection_matches_punctuation_in_name():
+    """Model picker slug (local-localhost) must match config name Local (localhost)."""
+    profile_cfg = {
+        "custom_providers": [
+            {
+                "name": "Local (localhost)",
+                "base_url": "http://localhost/v1",
+                "api_key": "inline-key",
+            },
+            {
+                "name": "other-endpoint",
+                "base_url": "http://192.168.99.1:4000/v1",
+                "api_key": "other-key",
+            },
+        ]
+    }
+    with _RestoreCfg():
+        config.cfg.clear()
+        config.cfg.update({"custom_providers": profile_cfg["custom_providers"]})
+        for provider_id in ("custom:local-localhost", "custom:local-(localhost)"):
+            api_key, base_url = config.resolve_custom_provider_connection(
+                provider_id,
+                profile_cfg,
+            )
+            assert api_key == "inline-key", provider_id
+            assert base_url == "http://localhost/v1", provider_id
+
+        assert config._named_custom_provider_slug_for_provider(
+            "custom:local-(localhost)",
+            profile_cfg,
+        ) == "custom:local-localhost"
+
+
+def test_resolve_webui_runtime_provider_skips_hermes_cli_for_custom_slug(monkeypatch):
+    """WebUI custom slug must not call hermes_cli when config.yaml matches."""
+    profile_cfg = {
+        "custom_providers": [
+            {
+                "name": "Local (localhost)",
+                "base_url": "http://localhost/v1",
+                "api_key": "inline-key",
+            },
+        ]
+    }
+
+    def _unexpected_hermes_cli(**kwargs):
+        raise AssertionError("hermes_cli.resolve_runtime_provider should not run")
+
+    import hermes_cli.runtime_provider as runtime_provider
+
+    monkeypatch.setattr(
+        runtime_provider,
+        "resolve_runtime_provider",
+        _unexpected_hermes_cli,
+    )
+
+    with _RestoreCfg():
+        config.cfg.clear()
+        config.cfg.update({"custom_providers": profile_cfg["custom_providers"]})
+        result = config.resolve_webui_runtime_provider(
+            "custom:local-localhost",
+            profile_cfg,
+        )
+
+    assert result["api_key"] == "inline-key"
+    assert result["base_url"] == "http://localhost/v1"
+    assert result["source"] == "webui_custom_provider"

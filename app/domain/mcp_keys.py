@@ -5,7 +5,15 @@ from __future__ import annotations
 import secrets
 from typing import Any
 
-from app.document_api.mcp_auth import MCP_USER_KEY_PREFIX, hash_mcp_api_key
+MCP_USER_KEY_PREFIX = "mcp_"
+
+
+def hash_mcp_api_key(raw_key: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+
 from app.domain.users import UserNotFoundError, get_user, is_multi_user_enabled, normalize_email
 from app.storage.repositories.users import get_users_repository
 
