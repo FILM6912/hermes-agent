@@ -3,6 +3,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Custom provider runtime warning:** WebUI chat no longer calls `hermes_cli.resolve_runtime_provider` for named `custom:*` providers that already resolve from `config.yaml`, avoiding spurious "Unknown provider 'custom:…'" warnings when display names contain punctuation (e.g. `Local (localhost)` → `custom:local-localhost`).
+
 ### Changed
 
 - **Transcript audio report column:** After upload/process, the document API now generates ``audio_llm_report`` (formal Markdown report) via ``prompts/transcript_audio_report.md``, alongside ``audio_llm_summary``. ``created_by`` / ``updated_by`` on upload and process jobs are taken from the logged-in user, not form fields.

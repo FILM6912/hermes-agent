@@ -2166,6 +2166,41 @@ def resolve_model_provider(model_id: str, config_obj: dict | None = None) -> tup
     return model_id, config_provider, config_base_url
 
 
+def resolve_webui_runtime_provider(
+    requested: str | None = None,
+    config_obj: dict | None = None,
+    **kwargs,
+) -> dict:
+    """Resolve runtime credentials for WebUI agent startup.
+
+    Named ``custom:*`` providers are resolved from ``config.yaml`` first.
+    ``hermes_cli.runtime_provider`` normalizes display names differently
+    (e.g. ``Local (localhost)`` → ``custom:local-(localhost)``) than the
+    WebUI model picker (``custom:local-localhost``), so a direct CLI lookup
+    raises "Unknown provider" even when the WebUI config is valid.
+    """
+    pid = str(requested or "").strip()
+    if pid.lower().startswith("custom:"):
+        cp_key, cp_base = resolve_custom_provider_connection(pid, config_obj)
+        if cp_key or cp_base:
+            return {
+                "provider": pid,
+                "api_key": cp_key,
+                "base_url": cp_base,
+                "source": "webui_custom_provider",
+                "requested_provider": pid,
+            }
+
+    from app.domain.oauth import resolve_runtime_provider_with_anthropic_env_lock
+    from hermes_cli.runtime_provider import resolve_runtime_provider
+
+    return resolve_runtime_provider_with_anthropic_env_lock(
+        resolve_runtime_provider,
+        requested=requested,
+        **kwargs,
+    )
+
+
 def resolve_custom_provider_connection(
     provider_id: str,
     config_obj: dict | None = None,

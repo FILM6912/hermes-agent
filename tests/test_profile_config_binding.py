@@ -133,3 +133,39 @@ def test_resolve_custom_provider_connection_matches_punctuation_in_name():
             "custom:local-(localhost)",
             profile_cfg,
         ) == "custom:local-localhost"
+
+
+def test_resolve_webui_runtime_provider_skips_hermes_cli_for_custom_slug(monkeypatch):
+    """WebUI custom slug must not call hermes_cli when config.yaml matches."""
+    profile_cfg = {
+        "custom_providers": [
+            {
+                "name": "Local (localhost)",
+                "base_url": "http://localhost/v1",
+                "api_key": "inline-key",
+            },
+        ]
+    }
+
+    def _unexpected_hermes_cli(**kwargs):
+        raise AssertionError("hermes_cli.resolve_runtime_provider should not run")
+
+    import hermes_cli.runtime_provider as runtime_provider
+
+    monkeypatch.setattr(
+        runtime_provider,
+        "resolve_runtime_provider",
+        _unexpected_hermes_cli,
+    )
+
+    with _RestoreCfg():
+        config.cfg.clear()
+        config.cfg.update({"custom_providers": profile_cfg["custom_providers"]})
+        result = config.resolve_webui_runtime_provider(
+            "custom:local-localhost",
+            profile_cfg,
+        )
+
+    assert result["api_key"] == "inline-key"
+    assert result["base_url"] == "http://localhost/v1"
+    assert result["source"] == "webui_custom_provider"
