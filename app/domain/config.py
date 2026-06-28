@@ -1015,17 +1015,34 @@ def _resolve_provider_alias(name: str) -> str:
     return _PROVIDER_ALIASES.get(raw, name)
 
 
-def _custom_provider_slug_from_name(name: object) -> str:
+def _custom_provider_name_slug(name: object) -> str:
+    """Normalize a custom provider display name or ``custom:*`` id for lookup.
+
+    Collapses punctuation (parentheses, spaces) to hyphens so
+    ``Local (localhost)``, ``custom:local-localhost``, and
+    ``custom:local-(localhost)`` compare equal.  Endpoint-authority slugs
+    like ``10.8.71.41:8080`` become ``10.8.71.41-8080`` here; callers that
+    must preserve ``custom:<host>:<port>`` grammar should not route through
+    this helper for the final provider id.
+    """
     raw = str(name or "").strip().lower()
     if not raw:
         return ""
     if raw.startswith("custom:"):
-        return raw
-    # Keep name-derived custom provider slugs out of the @provider:model colon
-    # grammar. Endpoint-derived slugs may still be custom:<host>:<port>, but a
-    # friendly name like "Local (127.0.0.1:15721)" should not preserve ':'.
+        raw = raw.split(":", 1)[1].strip()
     slug = re.sub(r"[^a-z0-9._-]+", "-", raw).strip("-")
-    slug = re.sub(r"-{2,}", "-", slug)
+    return re.sub(r"-{2,}", "-", slug)
+
+
+def _custom_provider_slug_from_name(name: object) -> str:
+    raw = str(name or "").strip().lower()
+    if not raw:
+        return ""
+    # Preserve endpoint-authority slugs (custom:<host>:<port>) for @provider:model
+    # routing; friendly names like "Local (127.0.0.1:15721)" slug separately.
+    if raw.startswith("custom:") and raw.count(":") >= 2:
+        return raw
+    slug = _custom_provider_name_slug(raw)
     if not slug:
         return ""
     return "custom:" + slug
@@ -1057,13 +1074,14 @@ def _named_custom_provider_slug_for_provider(
     raw = str(provider or "").strip().lower()
     if not raw:
         return ""
-    raw_suffix = raw.removeprefix("custom:")
+    raw_suffix = _custom_provider_name_slug(raw)
     for entry in _custom_provider_entries(config_obj):
         entry_name = str(entry.get("name") or "").strip().lower()
         slug = _custom_provider_slug_from_name(entry_name)
         if not entry_name or not slug:
             continue
-        if raw in {entry_name, slug} or raw_suffix == slug.removeprefix("custom:"):
+        slug_suffix = _custom_provider_name_slug(slug)
+        if raw in {entry_name, slug} or raw_suffix == slug_suffix:
             return slug
     return ""
 
@@ -2151,13 +2169,7 @@ def resolve_custom_provider_connection(
     if not pid.startswith("custom:"):
         return None, None
 
-    def _slugify(value: str) -> str:
-        s = str(value or "").strip().lower().replace("_", "-").replace(" ", "-")
-        while "--" in s:
-            s = s.replace("--", "-")
-        return s.strip("-")
-
-    slug = _slugify(pid.split(":", 1)[1].strip())
+    slug = _custom_provider_name_slug(pid)
     if not slug:
         return None, None
 
@@ -2190,7 +2202,7 @@ def resolve_custom_provider_connection(
         name = str(entry.get("name") or "").strip()
         if not name:
             continue
-        entry_slug = _slugify(name)
+        entry_slug = _custom_provider_name_slug(name)
         if entry_slug != slug:
             continue
 

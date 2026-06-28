@@ -15,6 +15,10 @@
 
 ### Fixed
 
+- **Windows custom provider slug matching:** Named custom providers with punctuation in the display name (e.g. `Local (localhost)`) now resolve when the model picker emits the normalized slug `custom:local-localhost`, so chat streaming can load `custom_providers[].base_url` and API keys instead of failing with “Unknown provider” / missing `CUSTOM_*_API_KEY`.
+
+- **Windows `start.ps1` HERMES_HOME:** Prefer `%USERPROFILE%\.hermes` when Hermes CLI config or agent install exists there, instead of always defaulting to `%LOCALAPPDATA%\hermes` and splitting WebUI from CLI state.
+
 - **React chat apperror visibility:** The Agent-UI SSE client now handles backend `apperror` events (provider init failures, missing API keys, rate limits, etc.) and renders an inline assistant error bubble, matching legacy `static-legacy/messages.js` behavior instead of leaving the stream hanging with no feedback.
 
 - **Insights/Logs RBAC:** `/api/v1/insights` and `/api/v1/logs` now honor `insights:read` and `logs:read` instead of requiring admin. Non-admin viewers see only their own scope in the UI (no `/admin/users` call); admins retain the combined user scope dropdown.
