@@ -80,6 +80,7 @@ import {
 } from "@/features/chat/utils/sessionStreamReattach";
 import {
   dedupeTranscriptMessages,
+  insertPendingUserIntoTranscript,
   mergeLocalAndServerTranscript,
 } from "@/features/chat/utils/transcriptMerge";
 import { Trash2 } from "lucide-react";
@@ -1445,11 +1446,15 @@ export default function App() {
           session.messages,
           session.tool_calls,
         );
+        const activeStreamId = readActiveStreamId(session);
         const pendingUserMessage = mergePendingUserMessage(session, serverMessages);
         const messagesWithPending = pendingUserMessage
-          ? [...serverMessages, pendingUserMessage]
+          ? insertPendingUserIntoTranscript(
+              serverMessages,
+              pendingUserMessage,
+              activeStreamId,
+            )
           : serverMessages;
-        const activeStreamId = readActiveStreamId(session);
 
         let messagesForReattach = messagesWithPending;
         const loadedContextUsage = contextUsageFromHermesSession(session);
@@ -1459,6 +1464,11 @@ export default function App() {
         setSessions(prev => {
           const existing = prev[activeChatId];
           if (!existing && messagesWithPending.length === 0) return prev;
+
+          if (isStreamingRef.current && existing?.messages?.length) {
+            messagesForReattach = existing.messages;
+            return prev;
+          }
 
           const localMessages = existing?.messages || [];
           const finalMessages = dedupeTranscriptMessages(
