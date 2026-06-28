@@ -240,7 +240,7 @@ export const DepartmentsPanel: React.FC = () => {
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Departments</h2>
           <p className="text-sm text-zinc-500">
-            Departments can be used to group users for access control.
+            RAG uploads are scoped by department — supervisors see only their department; admin sees all.
           </p>
         </div>
         <div className="flex gap-2">

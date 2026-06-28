@@ -71,15 +71,7 @@ export const useAgentModels = ({
     async (opts?: { modelsOnly?: boolean }) => {
       try {
         const pickerResult = await listPickerModels();
-        const models = Array.isArray(pickerResult)
-          ? pickerResult
-          : (pickerResult?.models ?? []);
-        const defaultModelId = Array.isArray(pickerResult)
-          ? ""
-          : (pickerResult?.defaultModelId ?? "");
-        const activeProvider = Array.isArray(pickerResult)
-          ? undefined
-          : pickerResult?.activeProvider;
+        const { models, defaultModelId, activeProvider } = pickerResult;
         setAgentModels(models);
 
         const current = modelConfigRef.current;

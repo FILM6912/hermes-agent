@@ -8,54 +8,6 @@ export function messageComparableText(message: Message): string {
 }
 
 /** Legacy parity: sessions.js `_sameTranscriptMessage`. */
-/**
- * Legacy parity: `sessions.js` `_mergePendingSessionMessage` — trailing assistant
- * with no finalized prose is the in-progress stream bubble.
- */
-export function findLiveAssistantIndex(messages: Message[]): number {
-  if (messages.length === 0) return -1;
-  const last = messages[messages.length - 1];
-  if (last.role !== "assistant") return -1;
-  const content = messageComparableText(last);
-  if (!content) return messages.length - 1;
-  if ((last.steps?.length ?? 0) > 0 || (last.blocks?.length ?? 0) > 0) {
-    return messages.length - 1;
-  }
-  return -1;
-}
-
-/** Insert optimistic pending user turn before a live assistant bubble when streaming. */
-export function insertPendingUserIntoTranscript(
-  messages: Message[],
-  pendingUser: Message,
-  activeStreamId?: string,
-): Message[] {
-  if (messages.some((m) => sameTranscriptMessage(m, pendingUser))) {
-    return messages;
-  }
-  const next = [...messages];
-  const liveAssistantIdx = activeStreamId?.trim()
-    ? findLiveAssistantIndex(next)
-    : -1;
-  if (liveAssistantIdx >= 0) {
-    next.splice(liveAssistantIdx, 0, pendingUser);
-  } else {
-    next.push(pendingUser);
-  }
-  return next;
-}
-
-function appendUnconsumedLocalMessage(merged: Message[], localMsg: Message): void {
-  if (localMsg.role === "user") {
-    const liveIdx = findLiveAssistantIndex(merged);
-    if (liveIdx >= 0) {
-      merged.splice(liveIdx, 0, localMsg);
-      return;
-    }
-  }
-  merged.push(localMsg);
-}
-
 export function sameTranscriptMessage(a: Message, b: Message): boolean {
   if (a.role !== b.role) return false;
 
@@ -160,7 +112,7 @@ export function mergeLocalAndServerTranscript(
     if (consumedLocal.has(i)) continue;
     const localMsg = plainLocal[i];
     if (merged.some((m) => sameTranscriptMessage(m, localMsg))) continue;
-    appendUnconsumedLocalMessage(merged, localMsg);
+    merged.push(localMsg);
   }
 
   for (const branched of branchedLocal) {

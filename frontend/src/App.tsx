@@ -594,35 +594,13 @@ export default function App() {
     setSessions((prev) => {
       const updated = { ...prev };
       Object.keys(updated).forEach((key) => {
-        const session = updated[key];
-        if (!session) return;
-        if ((session.messages?.length ?? 0) === 0) {
-          updated[key] = {
-            ...session,
-            messages: session.messages ?? [],
-            title: t("sidebar.newTask"),
-          };
+        if (updated[key].messages.length === 0) {
+          updated[key].title = t("sidebar.newTask");
         }
       });
       return updated;
     });
   }, [t]);
-
-  // Drop stale chat state when the shell is unauthenticated (logout / expired session).
-  useEffect(() => {
-    if (!authBootReady || isAuthenticated) return;
-    resetSessions();
-    syncConfirmedSessionIds(new Set());
-    clearRejectedSessionIds();
-    setActiveChatIdSynced("");
-  }, [
-    authBootReady,
-    isAuthenticated,
-    resetSessions,
-    syncConfirmedSessionIds,
-    clearRejectedSessionIds,
-    setActiveChatIdSynced,
-  ]);
 
   // Ref for checking streaming status in useEffects without dependency
   const isStreamingRef = useRef(isStreaming);
@@ -941,7 +919,7 @@ export default function App() {
         const newSessionsMap: Record<string, ChatSession> = {};
         fetchedSessions.forEach((s) => {
           const existing = prev[s.id];
-          if (existing && (existing.messages?.length ?? 0) > 0) {
+          if (existing && existing.messages.length > 0) {
             newSessionsMap[s.id] = {
               ...s,
               messages: existing.messages,

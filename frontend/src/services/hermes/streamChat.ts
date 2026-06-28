@@ -8,7 +8,6 @@ import {
   buildLiveStreamProcessSteps,
   clarifyEchoContentFromStreamPayload,
   finalizeLiveToolCallsForCancel,
-  type HermesLiveToolCall,
 } from "./mappers";
 import { finalizeRunningProcessSteps } from "@/features/chat/utils/finalizeRunningProcessSteps";
 import { modelProviderForHermes } from "./models";
@@ -93,7 +92,7 @@ type StreamQueueState = {
   committedReasoning: string[];
   assistantRawText: string;
   lastPushedDisplayText: string;
-  liveTools: HermesLiveToolCall[];
+  liveTools: ReturnType<typeof applyStreamToolEvent>;
 };
 
 function createStreamQueueState(): StreamQueueState {
@@ -125,6 +124,8 @@ function pushDisplayTextFromRaw(state: StreamQueueState) {
     state.committedReasoning,
     state.reasoningText,
   );
+  // Legacy parity: while reasoning is the same as the answer, keep text hidden
+  // so the thought-process panel can stream first (#852).
   if (reasoning && !isDistinctThinking(reasoning, display)) {
     if (!display.trim()) return;
   }
@@ -249,6 +250,7 @@ function subscribeHermesStreamToQueue(
         commitLiveReasoning(state);
         pushStepsFromState(state);
         pushDisplayTextFromRaw(state);
+        // End live UI state now; keep SSE open until `stream_close` for late `title`.
         pushChunk(state, { type: "turn_end" });
       },
       onStreamClose: () => {
@@ -313,6 +315,10 @@ async function* drainHermesStreamQueue(
   }
 }
 
+/**
+ * Re-subscribe to an in-flight or journal-replayable stream after page reload.
+ * Does not call POST /chat/start.
+ */
 export async function* reattachHermesChatStream(
   options: ReattachHermesChatStreamOptions,
 ): AsyncGenerator<HermesStreamChunk, void, unknown> {
@@ -341,6 +347,10 @@ export async function* reattachHermesChatStream(
   yield* drainHermesStreamQueue(state, signal, trimmedId);
 }
 
+/**
+ * Stream an assistant turn via POST /chat/start + GET /chat/stream (SSE).
+ * Yields incremental text and optional live tool/reasoning steps.
+ */
 export async function* streamHermesChat(
   options: StreamHermesChatOptions,
 ): AsyncGenerator<HermesStreamChunk, void, unknown> {
@@ -390,5 +400,3 @@ export async function* streamHermesChat(
     throw error;
   }
 }
-
-export type { HermesChatStartResult };

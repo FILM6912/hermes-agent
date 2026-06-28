@@ -74,8 +74,7 @@ export const ProfilesPanel: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     void listPickerModels()
-      .then((result) => {
-        const models = Array.isArray(result) ? result : (result?.models ?? []);
+      .then(({ models }) => {
         if (!cancelled) setPickerModels(models);
       })
       .catch(() => {

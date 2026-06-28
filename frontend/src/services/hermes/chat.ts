@@ -18,6 +18,7 @@ import type {
   HermesChatStreamToolPayload,
   HermesSubscribeChatStreamOptions,
 } from "@/types/hermes/chat";
+import type { GetSessionOptions } from "@/types/hermes/sessions";
 import { mapSessionDetailToChatSession } from "./mappers";
 import { getSession } from "./sessions";
 
@@ -38,9 +39,29 @@ export type {
   HermesSubscribeChatStreamOptions,
 } from "@/types/hermes/chat";
 
-export function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
+/** @deprecated Use `HermesChatStartBody`. */
+export type ChatStartBody = HermesChatStartBody;
+
+/** @deprecated Use `HermesChatStartResult`. */
+export type ChatStartResult = HermesChatStartResult;
+
+/** @deprecated Use `HermesChatCancelResult`. */
+export type ChatCancelResult = HermesChatCancelResult;
+
+/** @deprecated Use `HermesChatStreamTokenPayload`. */
+export type ChatStreamTokenPayload = HermesChatStreamTokenPayload;
+
+/** @deprecated Use `HermesChatStreamDonePayload`. */
+export type ChatStreamDonePayload = HermesChatStreamDonePayload;
+
+/** @deprecated Use `HermesChatStreamErrorPayload`. */
+export type ChatStreamErrorPayload = HermesChatStreamErrorPayload;
+
+/** @deprecated Use `HermesChatStreamHandlers`. */
+export type ChatStreamHandlers = HermesChatStreamHandlers;
+
+/** @deprecated Use `HermesSubscribeChatStreamOptions`. */
+export type SubscribeChatStreamOptions = HermesSubscribeChatStreamOptions;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -54,27 +75,6 @@ function parseSseData<T extends Record<string, unknown>>(raw: string, fallback: 
   } catch {
     return fallback;
   }
-}
-
-/** Map backend `apperror` SSE payload → assistant markdown (legacy messages.js parity). */
-export function formatApperrorAssistantContent(payload: Record<string, unknown>): string {
-  const errType = asString(payload.type);
-  const message = asString(payload.message, "An error occurred. Check server logs.");
-  const hint = asString(payload.hint).trim();
-
-  let label = "Error";
-  if (errType === "cancelled") label = "Task cancelled";
-  else if (errType === "interrupted") label = "Response interrupted";
-  else if (errType === "quota_exhausted") label = "Out of credits";
-  else if (errType === "rate_limit") label = "Rate limit reached";
-  else if (errType === "auth_mismatch") label = "Provider mismatch";
-  else if (errType === "model_not_found") label = "Model not found";
-  else if (errType === "no_response" || errType === "silent_failure") {
-    label = "No response from provider";
-  }
-
-  const hintSuffix = hint ? `\n\n*${hint}*` : "";
-  return `**${label}:** ${message}${hintSuffix}`;
 }
 
 /** Start a chat turn; returns the server-assigned `stream_id` for SSE subscription. */
@@ -101,13 +101,28 @@ export async function getChatStreamStatus(
   });
 }
 
-/** Load full session detail + mapped message history for chat open. */
-export async function loadChatSession(sessionId: string): Promise<ChatSession> {
-  const { session } = await getSession(sessionId);
+/**
+ * M12 — load full session detail + mapped message history for chat open.
+ * Defaults to `messages=1` and model resolution on the server.
+ */
+export async function loadChatSession(
+  sessionId: string,
+  options: GetSessionOptions = {},
+): Promise<ChatSession> {
+  const { session } = await getSession(sessionId, {
+    loadMessages: true,
+    resolveModel: true,
+    ...options,
+  });
   return mapSessionDetailToChatSession(session);
 }
 
-/** Subscribe to live chat SSE for a `stream_id`. Returns a `close` function. */
+/**
+ * Subscribe to live chat SSE for a `stream_id`.
+ * Handles token, reasoning, tool, tool_complete, done, stream_end, stream_close,
+ * title, apperror, and error.
+ * Returns a `close` function that shuts down the EventSource.
+ */
 export function subscribeChatStream(
   streamId: string,
   handlers: HermesChatStreamHandlers,
@@ -136,7 +151,9 @@ export function subscribeChatStream(
     postEndCloseTimer = null;
   };
 
-  const notifyStreamClose = (payload: HermesChatStreamClosePayload = {}) => {
+  const notifyStreamClose = (
+    payload: HermesChatStreamClosePayload = {},
+  ) => {
     if (streamCloseNotified) return;
     streamCloseNotified = true;
     handlers.onStreamClose?.(payload);

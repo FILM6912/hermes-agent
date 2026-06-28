@@ -10,7 +10,6 @@ export type HermesChatAttachmentPayload = {
   mime?: string;
   size?: number;
   is_image?: boolean;
-  workspace_rel?: string;
 };
 
 /** Body for `POST /api/v1/chat/start`. */

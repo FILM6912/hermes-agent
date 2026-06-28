@@ -1,9 +1,12 @@
-/** True when composer workspace differs from the server-bound session workspace. */
+/**
+ * Whether the composer workspace must be pushed to the active Hermes session.
+ * GET /list uses server-side session.workspace; client-only state is not enough.
+ */
 export function composerNeedsServerWorkspaceBind(
-  composer: string,
-  server: string,
+  composerWorkspace: string,
+  serverWorkspace: string,
 ): boolean {
-  const c = composer.trim();
-  if (!c) return false;
-  return server.trim() !== c;
+  const composer = composerWorkspace.trim();
+  if (!composer) return false;
+  return serverWorkspace.trim() !== composer;
 }

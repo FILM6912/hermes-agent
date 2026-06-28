@@ -1,0 +1,188 @@
+/**
+ * Hermes WebUI API adapters for Agent-UI (barrel exports).
+ */
+
+export {
+  buildCreateSessionBody,
+  buildListSessionsQuery,
+  buildSessionDeleteBody,
+  buildSessionRenameBody,
+  createSession,
+  createSessionId,
+  deleteSession,
+  deleteAllSessions,
+  getSession,
+  listSessions,
+  narrowSessionDeleteResponse,
+  narrowSessionDetailResponse,
+  narrowSessionRenameResponse,
+  narrowSessionSummary,
+  narrowSessionsListResponse,
+  renameSession,
+  renameSessionOnFirstMessage,
+  updateSession,
+  sessionIdFromDetailResponse,
+  type CreateSessionOptions,
+  type GetSessionOptions,
+  type HermesSessionCreateResponse,
+  type HermesSessionDeleteBody,
+  type HermesSessionDeleteResponse,
+  type HermesSessionDetail,
+  type HermesSessionDetailResponse,
+  type HermesSessionMessage,
+  type HermesSessionRenameBody,
+  type HermesSessionRenameResponse,
+  type HermesSessionUpdateBody,
+  type HermesSessionSummary,
+  type HermesSessionsListResponse,
+  type ListSessionsOptions,
+} from "./sessions";
+
+export {
+  ensureServerSessionId,
+  isSessionNotFoundError,
+} from "./sessionGuard";
+
+export {
+  extractMessageContent,
+  applyStreamToolCompleteEvent,
+  applyStreamToolEvent,
+  buildLiveStreamProcessSteps,
+  mapHermesMessageToMessage,
+  mapHermesMessagesToMessages,
+  isAgentInjectedUserTurn,
+  reasoningTextFromHermesMessage,
+  mapSessionDetailToChatSession,
+  mapSessionSummariesToChatSessions,
+  mapSessionSummaryToChatSession,
+  reasoningTextToProcessStep,
+} from "./mappers";
+
+export {
+  cancelChatStream,
+  loadChatSession,
+  startChatTurn,
+  subscribeChatStream,
+  type ChatCancelResult,
+  type ChatStartBody,
+  type ChatStartResult,
+  type ChatStreamDonePayload,
+  type ChatStreamErrorPayload,
+  type ChatStreamHandlers,
+  type ChatStreamTokenPayload,
+  type HermesChatCancelResult,
+  type HermesChatStartBody,
+  type HermesChatStartResult,
+  type HermesChatStreamDonePayload,
+  type HermesChatStreamEndPayload,
+  type HermesChatStreamErrorPayload,
+  type HermesChatStreamHandlers,
+  type HermesChatStreamReasoningPayload,
+  type HermesChatStreamTokenPayload,
+  type HermesChatStreamToolPayload,
+  type HermesSubscribeChatStreamOptions,
+  type SubscribeChatStreamOptions,
+} from "./chat";
+
+export {
+  streamHermesChat,
+  type HermesStreamChunk,
+  type StreamHermesChatOptions,
+} from "./streamChat";
+
+export {
+  combinedReasoningText,
+  isDistinctThinking,
+  normalizeThinkingCompare,
+  stripThinkingFromAssistantStream,
+} from "./streamDisplay";
+
+export {
+  createStreamChunkReduceState,
+  reduceClarifyEchoToSession,
+  reduceStreamChunk,
+  type StreamChunkReduceOpts,
+  type StreamChunkReduceResult,
+  type StreamChunkReduceState,
+} from "./reduceStreamChunk";
+
+export {
+  addWorkspace,
+  createNestedWorkspace,
+  createDirectory,
+  createFile,
+  deleteFile,
+  fetchFileBlob,
+  fileRawUrl,
+  fileViewUrl,
+  fileOpenInBrowserUrl,
+  isDirectoryEntry,
+  listDirectory,
+  listWorkspaces,
+  mapEntriesToFileNodes,
+  mapEntryToFileNode,
+  moveFile,
+  narrowListDirResponse,
+  narrowReadFileResponse,
+  narrowWorkspacesResponse,
+  readFile,
+  readWorkspaceFile,
+  readWorkspaceFileRaw,
+  readWorkspaceFileView,
+  renameFile,
+  renameWorkspace,
+  reorderWorkspaces,
+  removeWorkspace,
+  saveFile,
+  switchComposerWorkspace,
+  type SwitchComposerWorkspaceOptions,
+  type SwitchComposerWorkspaceResult,
+  setTreeChildren,
+  setTreeNodeContent,
+  splitWorkspacePath,
+  suggestWorkspaces,
+  type HermesDirEntry,
+  type HermesFileMutationResponse,
+  type HermesListDirResponse,
+  type HermesReadFileResponse,
+  type HermesWorkspace,
+  type HermesWorkspacesResponse,
+  type WorkspaceFileRawOptions,
+} from "./workspace";
+
+export {
+  narrowUploadResponse,
+  uploadFile,
+  type HermesUploadResponse,
+} from "./upload";
+
+export {
+  execCommand,
+  listCommands,
+  matchSlashCommands,
+  narrowCommand,
+  narrowCommandsResponse,
+  type HermesCommand,
+  type HermesCommandExecResponse,
+  type HermesCommandsResponse,
+  type SlashCommandMatch,
+} from "./commands";
+
+export {
+  listMcpServers,
+  listMcpTools,
+  discoverMcpServers,
+  testMcpServer,
+  updateMcpServer,
+  toggleMcpServer,
+  deleteMcpServer,
+  narrowMcpServer,
+  narrowMcpServersResponse,
+  narrowMcpTool,
+  narrowMcpToolsResponse,
+  type HermesMcpServer,
+  type HermesMcpServersResponse,
+  type HermesMcpTool,
+  type HermesMcpToolsResponse,
+  type HermesMcpServerTestResponse,
+} from "./mcp";
