@@ -1,6 +1,29 @@
 import type { ChatSession, Message, ProcessStep } from "@/types";
-import { asString } from "@/services/hermes/chat";
-import { isDistinctThinking } from "@/services/hermes/streamDisplay";
+import { formatClarifyEchoMessage } from "@/features/clarify/utils/formatClarifyEcho";
+import { displayVirtualPathsInToolArgs } from "@/services/hermes/displayVirtualPaths";
+import {
+  combinedReasoningText,
+  isDistinctThinking,
+} from "@/services/hermes/streamDisplay";
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export function toolResultSnippetFromPayload(payload: Record<string, unknown>): string {
   const preview = asString(payload.preview).trim();
@@ -179,4 +202,198 @@ export function mapHermesMessagesToMessages(
 
 export function shouldShowChatSessionInSidebar(): boolean {
   return true;
+}
+
+export type HermesLiveToolCall = {
+  id: string;
+  name: string;
+  preview?: string;
+  args?: unknown;
+  snippet?: string;
+  done: boolean;
+  cancelled?: boolean;
+  isError?: boolean;
+  duration?: number;
+  afterTextLength?: number;
+};
+
+/** Mark incomplete live tool calls as cancelled (stream abort / user stop). */
+export function finalizeLiveToolCallsForCancel(
+  tools: HermesLiveToolCall[],
+): HermesLiveToolCall[] {
+  return tools.map((tool) =>
+    tool.done ? tool : { ...tool, done: true, cancelled: true },
+  );
+}
+
+function liveToolStatus(tool: HermesLiveToolCall): ProcessStep["status"] {
+  if (!tool.done) return "running";
+  if (tool.cancelled) return "cancelled";
+  return tool.isError ? "completed" : "completed";
+}
+
+function formatToolArgs(args: unknown): string {
+  const displayed = displayVirtualPathsInToolArgs(args);
+  if (typeof displayed === "string") return displayed;
+  if (displayed === undefined || displayed === null) return "";
+  try {
+    return JSON.stringify(displayed, null, 2);
+  } catch {
+    return String(displayed);
+  }
+}
+
+function liveToolCallToProcessStep(tool: HermesLiveToolCall): ProcessStep {
+  const argsText = formatToolArgs(tool.args);
+  const snippet = asString(tool.snippet) || asString(tool.preview);
+  const duration =
+    typeof tool.duration === "number" && Number.isFinite(tool.duration)
+      ? `${tool.duration}s`
+      : undefined;
+
+  return {
+    id: tool.id,
+    type: tool.isError ? "error" : "command",
+    title: tool.name,
+    toolName: tool.name,
+    preview: tool.preview,
+    content: `${argsText ? `Input:\n\`\`\`json\n${argsText}\n\`\`\`` : ""}${snippet ? `\n\nOutput:\n${snippet}` : ""}`,
+    duration,
+    status: liveToolStatus(tool),
+    isExpanded: false,
+    afterTextLength: tool.afterTextLength,
+  };
+}
+
+export function reasoningTextToProcessStep(
+  text: string,
+  options?: { id?: string; status?: ProcessStep["status"] },
+): ProcessStep | null {
+  const content = text.trim();
+  if (!content) return null;
+  return {
+    id: options?.id ?? "reasoning-live",
+    type: "thinking",
+    title: "Reasoning",
+    content,
+    status: options?.status ?? "running",
+    isExpanded: false,
+  };
+}
+
+/** Build ProcessStep[] from live SSE tool + reasoning state. */
+export function buildLiveStreamProcessSteps(options: {
+  reasoningText?: string;
+  committedReasoning?: string[];
+  tools?: HermesLiveToolCall[];
+}): ProcessStep[] {
+  const steps: ProcessStep[] = [];
+  const combined = combinedReasoningText(
+    options.committedReasoning ?? [],
+    options.reasoningText ?? "",
+  );
+  const liveTail = (options.reasoningText ?? "").trim();
+  const reasoning = reasoningTextToProcessStep(combined, {
+    id: "reasoning-live",
+    status: liveTail ? "running" : "completed",
+  });
+  if (reasoning) steps.push(reasoning);
+
+  for (const tool of options.tools ?? []) {
+    if (tool.name === "clarify") continue;
+    steps.push(liveToolCallToProcessStep(tool));
+  }
+  return steps;
+}
+
+/** Apply an SSE `tool` event to the live tool-call list. */
+export function applyStreamToolEvent(
+  tools: HermesLiveToolCall[],
+  payload: Record<string, unknown>,
+  options?: { afterTextLength?: number },
+): HermesLiveToolCall[] {
+  const name = asString(payload.name, "tool");
+  if (name === "clarify") return tools;
+
+  const resultSnippet = toolResultSnippetFromPayload(payload);
+  const next: HermesLiveToolCall = {
+    id: asString(payload.tid, `live-${name}-${tools.length}`),
+    name,
+    preview: asString(payload.preview) || undefined,
+    args: payload.args ?? {},
+    snippet: resultSnippet || undefined,
+    done: false,
+    afterTextLength: options?.afterTextLength,
+  };
+  return [...tools, next];
+}
+
+/** Apply an SSE `tool_complete` event to the live tool-call list. */
+export function applyStreamToolCompleteEvent(
+  tools: HermesLiveToolCall[],
+  payload: Record<string, unknown>,
+  options?: { afterTextLength?: number },
+): HermesLiveToolCall[] {
+  const name = asString(payload.name, "tool");
+  if (name === "clarify") return tools;
+
+  const next = [...tools];
+  let target: HermesLiveToolCall | null = null;
+  for (let i = next.length - 1; i >= 0; i -= 1) {
+    const current = next[i];
+    if (!current.done && (!name || current.name === name)) {
+      target = current;
+      break;
+    }
+  }
+
+  const resultSnippet = toolResultSnippetFromPayload(
+    payload,
+    target?.snippet ?? target?.preview ?? "",
+  );
+
+  if (!target) {
+    next.push({
+      id: asString(payload.tid, `live-${name}-${next.length}`),
+      name,
+      preview: asString(payload.preview) || undefined,
+      args: payload.args ?? {},
+      snippet: resultSnippet || undefined,
+      done: true,
+      isError: Boolean(payload.is_error),
+      duration: typeof payload.duration === "number" ? payload.duration : undefined,
+      afterTextLength: options?.afterTextLength,
+    });
+    return next;
+  }
+
+  const idx = next.indexOf(target);
+  next[idx] = {
+    ...target,
+    preview: asString(payload.preview, target.preview ?? "") || undefined,
+    args: payload.args ?? target.args,
+    snippet: resultSnippet || undefined,
+    done: true,
+    isError: Boolean(payload.is_error),
+    duration: typeof payload.duration === "number" ? payload.duration : undefined,
+  };
+  return next;
+}
+
+/** Parse clarify tool_complete SSE / snippet JSON into a transcript line. */
+export function clarifyEchoContentFromStreamPayload(
+  payload: Record<string, unknown>,
+): string | null {
+  if (asString(payload.name) !== "clarify") return null;
+  const parsed =
+    parseJsonObject(payload.preview) ??
+    parseJsonObject(payload.snippet) ??
+    parseJsonObject(payload.args);
+  if (!parsed) return null;
+
+  const answer = asString(parsed.user_response).trim();
+  if (!answer) return null;
+
+  const question = asString(parsed.question).trim();
+  return formatClarifyEchoMessage(question, answer);
 }

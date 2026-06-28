@@ -1,18 +1,44 @@
-import { fetchJson } from "@/lib/api";
+/**
+ * Hermes chat streaming adapter — SSE tokens + tool/reasoning steps → Agent-UI chunks.
+ */
 import type { Attachment, ModelConfig, ProcessStep } from "@/types";
-import type { SessionContextUsage } from "@/features/chat/utils/contextUsage";
-import type { HermesChatStartResult } from "@/types/hermes/chat";
-import { finalizeRunningProcessSteps } from "@/features/chat/utils/finalizeRunningProcessSteps";
-import { modelProviderForHermes } from "@/services/hermes/models";
 import {
-  wireChatEventSource,
-  type LiveChatStreamState,
-} from "@/services/hermes/chat";
+  applyStreamToolCompleteEvent,
+  applyStreamToolEvent,
+  buildLiveStreamProcessSteps,
+  clarifyEchoContentFromStreamPayload,
+  finalizeLiveToolCallsForCancel,
+  type HermesLiveToolCall,
+} from "./mappers";
+import { finalizeRunningProcessSteps } from "@/features/chat/utils/finalizeRunningProcessSteps";
+import { modelProviderForHermes } from "./models";
+import {
+  cancelChatStream,
+  getChatStreamStatus,
+  startChatTurn,
+  subscribeChatStream,
+} from "./chat";
+import { formatChatMessageWithAttachments } from "./attachments";
+import {
+  combinedReasoningText,
+  isDistinctThinking,
+  stripThinkingFromAssistantStream,
+} from "./streamDisplay";
+import type { HermesChatStartResult } from "@/types/hermes/chat";
+import type { HermesSubscribeChatStreamOptions } from "@/types/hermes/chat";
+import {
+  parseContextUsage,
+  type SessionContextUsage,
+} from "@/features/chat/utils/contextUsage";
 
-export type HermesStreamChunk =
-  | { type: "text"; content: string }
-  | { type: "steps"; steps: ProcessStep[] }
-  | { type: "turn_end" };
+export { cancelChatStream } from "./chat";
+
+export type HermesStreamChunk = {
+  type: "text" | "steps" | "clarify_echo" | "turn_end";
+  content?: string;
+  steps?: ProcessStep[];
+  isFullText?: boolean;
+};
 
 export type StreamHermesChatOptions = {
   sessionId: string;
@@ -22,8 +48,11 @@ export type StreamHermesChatOptions = {
   profile?: string;
   attachments?: Attachment[];
   signal?: AbortSignal;
-  onChatStart?: (start: HermesChatStartResult) => void;
+  /** Called after POST /chat/start succeeds (before SSE subscription). */
+  onChatStart?: (result: HermesChatStartResult) => void;
+  /** Called when the server publishes an LLM-generated session title (`title` SSE). */
   onSessionTitle?: (sessionId: string, title: string) => void;
+  /** Called when token/context usage updates (`metering`, `done`, `compressed` SSE). */
   onContextUsage?: (usage: SessionContextUsage) => void;
 };
 
@@ -35,219 +64,331 @@ export type ReattachHermesChatStreamOptions = {
   onContextUsage?: (usage: SessionContextUsage) => void;
 };
 
-type ChatStartBody = {
-  session_id: string;
-  message: string;
-  model: string;
-  workspace?: string;
-  model_provider?: string | null;
-  profile?: string;
-  attachments?: Array<{ name: string; path: string }>;
+/** Map composer attachments to Hermes chat/start upload payloads. */
+function attachmentsForChatStart(attachments?: Attachment[]) {
+  if (!attachments?.length) return [];
+  return attachments.map((att) => ({
+    name: att.name,
+    path:
+      att.workspace_rel?.trim() ||
+      att.path?.trim() ||
+      (att.content?.startsWith("blob:") ? "" : att.content?.trim()) ||
+      "",
+    mime: att.mimeType || "",
+    is_image: att.type === "image",
+    ...(att.workspace_rel?.trim()
+      ? { workspace_rel: att.workspace_rel.trim() }
+      : {}),
+    ...(typeof att.size === "number" ? { size: att.size } : {}),
+  }));
+}
+
+type StreamQueueState = {
+  queue: HermesStreamChunk[];
+  wake: (() => void) | null;
+  finished: boolean;
+  streamError: Error | null;
+  closeSse: (() => void) | null;
+  reasoningText: string;
+  committedReasoning: string[];
+  assistantRawText: string;
+  lastPushedDisplayText: string;
+  liveTools: HermesLiveToolCall[];
 };
 
-function chatStartBody(options: StreamHermesChatOptions): ChatStartBody {
-  const modelProvider = modelProviderForHermes(options.modelConfig);
-  const body: ChatStartBody = {
-    session_id: options.sessionId,
-    message: options.message,
-    model: options.modelConfig.modelId,
-    profile: options.profile || "default",
-    model_provider: modelProvider ?? null,
+function createStreamQueueState(): StreamQueueState {
+  return {
+    queue: [],
+    wake: null,
+    finished: false,
+    streamError: null,
+    closeSse: null,
+    reasoningText: "",
+    committedReasoning: [],
+    assistantRawText: "",
+    lastPushedDisplayText: "",
+    liveTools: [],
   };
-  if (options.workspace) body.workspace = options.workspace;
-  const attachments = (options.attachments ?? [])
-    .map((attachment) => {
-      const path = (attachment.path || attachment.content || "").trim();
-      if (!path) return null;
-      return { name: attachment.name, path };
-    })
-    .filter(Boolean) as Array<{ name: string; path: string }>;
-  if (attachments.length > 0) body.attachments = attachments;
-  return body;
 }
 
-function createChunkQueue() {
-  const pending: HermesStreamChunk[] = [];
-  let notify: (() => void) | null = null;
-  let done = false;
-  let failure: unknown = null;
+function commitLiveReasoning(state: StreamQueueState) {
+  const segment = state.reasoningText.trim();
+  if (segment) {
+    state.committedReasoning.push(segment);
+  }
+  state.reasoningText = "";
+}
 
-  const wake = () => {
-    notify?.();
-    notify = null;
+function pushDisplayTextFromRaw(state: StreamQueueState) {
+  const display = stripThinkingFromAssistantStream(state.assistantRawText);
+  const reasoning = combinedReasoningText(
+    state.committedReasoning,
+    state.reasoningText,
+  );
+  if (reasoning && !isDistinctThinking(reasoning, display)) {
+    if (!display.trim()) return;
+  }
+  const last = state.lastPushedDisplayText ?? "";
+  if (display === last) return;
+  state.lastPushedDisplayText = display;
+  if (display.length > last.length) {
+    pushChunk(state, { type: "text", content: display.slice(last.length) });
+  } else if (display.length < last.length) {
+    pushChunk(state, { type: "text", content: display, isFullText: true });
+  }
+}
+
+function notifyQueue(state: StreamQueueState) {
+  state.wake?.();
+  state.wake = null;
+}
+
+function pushChunk(state: StreamQueueState, chunk: HermesStreamChunk) {
+  state.queue.push(chunk);
+  notifyQueue(state);
+}
+
+function pushStepsFromState(state: StreamQueueState, finalizeCancelled = false) {
+  const display = stripThinkingFromAssistantStream(state.assistantRawText);
+  let steps = buildLiveStreamProcessSteps({
+    reasoningText: state.reasoningText,
+    committedReasoning: state.committedReasoning,
+    tools: state.liveTools,
+  }).filter((step) => {
+    if (step.type !== "thinking") return true;
+    return isDistinctThinking(step.content, display);
+  });
+  if (finalizeCancelled) {
+    steps = finalizeRunningProcessSteps(steps) ?? steps;
+  }
+  if (steps.length > 0) {
+    pushChunk(state, { type: "steps", steps });
+  }
+}
+
+function finalizeStreamStateForCancel(state: StreamQueueState) {
+  state.liveTools = finalizeLiveToolCallsForCancel(state.liveTools);
+  commitLiveReasoning(state);
+  pushStepsFromState(state, true);
+  pushDisplayTextFromRaw(state);
+}
+
+function subscribeHermesStreamToQueue(
+  state: StreamQueueState,
+  streamId: string,
+  sessionId: string,
+  subscribeOptions: HermesSubscribeChatStreamOptions,
+  onSessionTitle?: (sessionId: string, title: string) => void,
+  onContextUsage?: (usage: SessionContextUsage) => void,
+) {
+  const emitContextUsage = (raw: Record<string, unknown> | undefined) => {
+    const parsed = parseContextUsage(raw);
+    if (parsed) onContextUsage?.(parsed);
   };
 
-  return {
-    push(chunk: HermesStreamChunk) {
-      pending.push(chunk);
-      wake();
-    },
-    finish() {
-      done = true;
-      wake();
-    },
-    fail(error: unknown) {
-      failure = error;
-      done = true;
-      wake();
-    },
-    async *iterate(): AsyncGenerator<HermesStreamChunk, void, unknown> {
-      while (true) {
-        while (pending.length > 0) {
-          yield pending.shift()!;
+  state.closeSse = subscribeChatStream(
+    streamId,
+    {
+      onTextDelta: (text) => {
+        if (!text) return;
+        state.assistantRawText += text;
+        pushDisplayTextFromRaw(state);
+      },
+      onReasoningDelta: (text) => {
+        if (!text) return;
+        state.reasoningText += text;
+        pushStepsFromState(state);
+      },
+      onTool: (payload) => {
+        commitLiveReasoning(state);
+        const afterTextLength = state.lastPushedDisplayText.length;
+        state.liveTools = applyStreamToolEvent(state.liveTools, payload, {
+          afterTextLength,
+        });
+        pushDisplayTextFromRaw(state);
+        pushStepsFromState(state);
+      },
+      onToolComplete: (payload) => {
+        const echo = clarifyEchoContentFromStreamPayload(payload);
+        if (echo) {
+          pushChunk(state, { type: "clarify_echo", content: echo });
         }
-        if (done) {
-          if (failure) throw failure;
+        const afterTextLength = state.lastPushedDisplayText.length;
+        state.liveTools = applyStreamToolCompleteEvent(state.liveTools, payload, {
+          afterTextLength,
+        });
+        pushDisplayTextFromRaw(state);
+        pushStepsFromState(state);
+      },
+      onDone: (payload) => {
+        commitLiveReasoning(state);
+        pushStepsFromState(state);
+        pushDisplayTextFromRaw(state);
+        emitContextUsage(payload.usage);
+      },
+      onMetering: (payload) => {
+        if ((payload.session_id || sessionId) !== sessionId) return;
+        emitContextUsage(payload.usage);
+      },
+      onCompressed: (payload) => {
+        const eventSid =
+          payload.old_session_id || payload.session_id || sessionId;
+        if (eventSid !== sessionId && payload.new_session_id !== sessionId) {
           return;
         }
-        await new Promise<void>((resolve) => {
-          notify = resolve;
-        });
-      }
-    },
-  };
-}
-
-function finalizeLiveToolCallsForCancel(steps: ProcessStep[]): ProcessStep[] {
-  return finalizeRunningProcessSteps(steps) ?? steps;
-}
-
-function finalizeStreamStateForCancel(
-  state: LiveChatStreamState,
-): HermesStreamChunk[] {
-  const steps = finalizeLiveToolCallsForCancel(state.steps);
-  const chunks: HermesStreamChunk[] = [];
-  if (steps.length > 0) {
-    chunks.push({ type: "steps", steps });
-  }
-  chunks.push({ type: "turn_end" });
-  return chunks;
-}
-
-async function* iterLiveChatStream(options: {
-  streamId: string;
-  sessionId: string;
-  signal?: AbortSignal;
-  onSessionTitle?: (sessionId: string, title: string) => void;
-  onContextUsage?: (usage: SessionContextUsage) => void;
-}): AsyncGenerator<HermesStreamChunk, void, unknown> {
-  const queue = createChunkQueue();
-  const state: LiveChatStreamState = {
-    assistantText: "",
-    reasoningParts: [],
-    steps: [],
-    finished: false,
-  };
-
-  let connection: { close: () => void } | null = null;
-
-  const abortIfNeeded = () => {
-    if (!options.signal?.aborted) return false;
-    for (const chunk of finalizeStreamStateForCancel(state)) {
-      queue.push(chunk);
-    }
-    connection?.close();
-    queue.finish();
-    return true;
-  };
-
-  connection = wireChatEventSource({
-    streamId: options.streamId,
-    sessionId: options.sessionId,
-    signal: options.signal,
-    state,
-    callbacks: {
-      push: (chunk) => {
-        if (abortIfNeeded()) return;
-        queue.push(chunk);
+        emitContextUsage(payload.usage);
       },
-      onSessionTitle: options.onSessionTitle,
-      onContextUsage: options.onContextUsage,
+      onTitle: (payload) => {
+        const sid =
+          typeof payload.session_id === "string" ? payload.session_id : sessionId;
+        const title =
+          typeof payload.title === "string" ? payload.title.trim() : "";
+        if (title) onSessionTitle?.(sid, title);
+      },
       onStreamEnd: () => {
-        if (abortIfNeeded()) return;
-        queue.push({ type: "turn_end" });
+        commitLiveReasoning(state);
+        pushStepsFromState(state);
+        pushDisplayTextFromRaw(state);
+        pushChunk(state, { type: "turn_end" });
       },
       onStreamClose: () => {
         state.finished = true;
-        connection?.close();
-        queue.finish();
+        notifyQueue(state);
       },
-      onError: (error) => {
-        if (options.signal?.aborted) {
-          abortIfNeeded();
-          return;
-        }
-        queue.fail(error);
+      onError: (payload) => {
+        const detail =
+          (typeof payload.details === "string" && payload.details.trim()) ||
+          (typeof payload.message === "string" && payload.message.trim()) ||
+          "";
+        state.streamError = new Error(detail || "Chat stream failed");
+        state.finished = true;
+        notifyQueue(state);
       },
     },
-  });
-
-  options.signal?.addEventListener(
-    "abort",
-    () => {
-      for (const chunk of finalizeStreamStateForCancel(state)) {
-        queue.push(chunk);
-      }
-      connection?.close();
-      queue.finish();
-    },
-    { once: true },
+    subscribeOptions,
   );
+}
+
+async function* drainHermesStreamQueue(
+  state: StreamQueueState,
+  signal: AbortSignal | undefined,
+  streamId: string | null,
+): AsyncGenerator<HermesStreamChunk, void, unknown> {
+  const wait = () =>
+    new Promise<void>((resolve) => {
+      state.wake = resolve;
+    });
+
+  const onAbort = () => {
+    finalizeStreamStateForCancel(state);
+    if (streamId) {
+      void cancelChatStream(streamId).catch(() => undefined);
+    }
+    state.closeSse?.();
+    state.finished = true;
+    notifyQueue(state);
+  };
+
+  signal?.addEventListener("abort", onAbort);
 
   try {
-    yield* queue.iterate();
+    while (true) {
+      while (state.queue.length > 0) {
+        yield state.queue.shift()!;
+      }
+
+      if (signal?.aborted) {
+        throw new DOMException("The user aborted a request.", "AbortError");
+      }
+
+      if (state.finished) {
+        if (state.streamError) throw state.streamError;
+        break;
+      }
+
+      await wait();
+    }
   } finally {
-    connection?.close();
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
-export function streamHermesChat(
-  options: StreamHermesChatOptions,
-): AsyncGenerator<HermesStreamChunk, void, unknown> {
-  return (async function* () {
-    const start = await fetchJson<HermesChatStartResult>("/chat/start", {
-      method: "POST",
-      body: chatStartBody(options),
-      signal: options.signal,
-    });
-
-    options.onChatStart?.(start);
-
-    const streamId = typeof start.stream_id === "string" ? start.stream_id.trim() : "";
-    if (!streamId) {
-      throw new Error("Server did not return stream_id");
-    }
-
-    if (start.title) {
-      options.onSessionTitle?.(options.sessionId, start.title);
-    }
-
-    yield* iterLiveChatStream({
-      streamId,
-      sessionId: options.sessionId,
-      signal: options.signal,
-      onSessionTitle: options.onSessionTitle,
-      onContextUsage: options.onContextUsage,
-    });
-  })();
-}
-
-export function reattachHermesChatStream(
+export async function* reattachHermesChatStream(
   options: ReattachHermesChatStreamOptions,
 ): AsyncGenerator<HermesStreamChunk, void, unknown> {
-  return iterLiveChatStream({
-    streamId: options.streamId,
-    sessionId: options.sessionId,
-    signal: options.signal,
-    onSessionTitle: options.onSessionTitle,
-    onContextUsage: options.onContextUsage,
-  });
+  const { streamId, sessionId, signal, onSessionTitle, onContextUsage } = options;
+  const trimmedId = streamId.trim();
+  if (!trimmedId) return;
+
+  const status = await getChatStreamStatus(trimmedId);
+  if (!status.active && !status.replay_available) {
+    return;
+  }
+
+  const state = createStreamQueueState();
+  const subscribeOptions: HermesSubscribeChatStreamOptions =
+    !status.active && status.replay_available ? { replay: true } : {};
+
+  subscribeHermesStreamToQueue(
+    state,
+    trimmedId,
+    sessionId,
+    subscribeOptions,
+    onSessionTitle,
+    onContextUsage,
+  );
+
+  yield* drainHermesStreamQueue(state, signal, trimmedId);
 }
 
-export async function cancelChatStream(streamId: string): Promise<void> {
-  const id = streamId.trim();
-  if (!id) return;
-  await fetchJson("/chat/cancel", { query: { stream_id: id } });
+export async function* streamHermesChat(
+  options: StreamHermesChatOptions,
+): AsyncGenerator<HermesStreamChunk, void, unknown> {
+  const {
+    sessionId,
+    message,
+    modelConfig,
+    workspace,
+    profile,
+    attachments,
+    signal,
+    onChatStart,
+    onSessionTitle,
+    onContextUsage,
+  } = options;
+
+  const state = createStreamQueueState();
+  let streamId: string | null = null;
+
+  try {
+    const modelProvider = modelProviderForHermes(modelConfig);
+    const start = await startChatTurn({
+      session_id: sessionId,
+      message: formatChatMessageWithAttachments(message, attachments),
+      model: modelConfig.modelId,
+      ...(workspace ? { workspace } : {}),
+      ...(profile ? { profile } : {}),
+      ...(modelProvider ? { model_provider: modelProvider } : {}),
+      attachments: attachmentsForChatStart(attachments),
+    });
+
+    onChatStart?.(start);
+    streamId = start.stream_id;
+
+    subscribeHermesStreamToQueue(
+      state,
+      streamId,
+      sessionId,
+      {},
+      onSessionTitle,
+      onContextUsage,
+    );
+
+    yield* drainHermesStreamQueue(state, signal, streamId);
+  } catch (error) {
+    state.closeSse?.();
+    throw error;
+  }
 }
 
 export type { HermesChatStartResult };

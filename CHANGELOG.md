@@ -5,6 +5,8 @@
 
 ### Fixed
 
+- **React chat stream parity (hermes-ui):** Live SSE now strips inline thinking tags from the assistant bubble, streams reasoning into the Thought Process panel separately, supports journal replay on reattach, clarify echo ordering, and `isFullText` transcript corrections — aligned with `hermes-ui` chat behavior.
+
 - **React thinking on session reload:** Session message mapping now reads API `reasoning` / structured content blocks into completed `thinking` steps so the Thought Process card appears after refresh, matching legacy `static-legacy/ui.js`.
 
 - **React live reasoning stream:** Reasoning SSE token chunks concatenate with empty-string join (legacy `+=` parity) so thinking text no longer breaks mid-word across lines.
